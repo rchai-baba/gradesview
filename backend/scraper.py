@@ -10,10 +10,13 @@ Auth flow:
   5. POST GetClassData (once per class, re-calling step 4 with classID to switch focus)
 """
 
-import re
+import hashlib
 import json
+import re
 import requests
+from collections import defaultdict
 from html import unescape
+from pathlib import Path
 
 BASE_URL = "https://mi-mps.edupoint.com"
 LOGIN_URL = f"{BASE_URL}/PXP2_Login_Student.aspx?regenerateSessionId=true"
@@ -198,6 +201,36 @@ def _get_focus_info(focus_data: dict) -> dict:
         "grading_period": target_gp,
         "mark_period_gu": mark_period_gu,
     }
+
+
+def _class_focus_grade_hints(cls: dict) -> tuple[float | None, str | None]:
+    """Best-effort grade from GradebookFocusClassInfo class row (no GetClassData)."""
+    pct: float | None = None
+    for key in ("Percent", "Percentage", "CurrentPercent", "GradePercent", "CurrentGradePercent"):
+        v = cls.get(key)
+        if v is not None and v != "":
+            try:
+                pct = float(v)
+                break
+            except (TypeError, ValueError):
+                continue
+    letter: str | None = None
+    for key in ("CalculatedMark", "LetterGrade", "Grade", "CurrentGrade", "Mark"):
+        v = cls.get(key)
+        if isinstance(v, str) and v.strip():
+            letter = v.strip()
+            break
+    return pct, letter
+
+
+def _find_grading_period_by_name(focus_data: dict, period_name: str) -> dict | None:
+    schools = focus_data.get("Schools", [])
+    if not schools:
+        return None
+    for gp in schools[0].get("GradingPeriods", []):
+        if gp.get("Name") == period_name:
+            return gp
+    return None
 
 
 def get_class_list(session: requests.Session, focus_data: dict) -> dict:
@@ -395,6 +428,73 @@ def _transform_categories(raw: dict) -> list[dict]:
     return out
 
 
+def _load_course_merge_config() -> dict:
+    """
+    course_merge_config.json next to this file:
+      mergeNameGroups: [["Title A", "Title B"], ...] — same teacher + any listed title → one card
+      semesterGroups: [["MP1","MP2"], ["MP3","MP4"]] — period labels for semester projections
+    """
+    path = Path(__file__).resolve().with_name("course_merge_config.json")
+    default_merge = [["Government", "Economics"], ["AP Government", "AP Economics"]]
+    default_sem = [["MP1", "MP2"], ["MP3", "MP4"]]
+    if not path.is_file():
+        return {
+            "mergeNameGroups": tuple(frozenset(x.lower() for x in g) for g in default_merge),
+            "semesterGroups": default_sem,
+        }
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        groups: list[frozenset[str]] = []
+        for g in data.get("mergeNameGroups", []):
+            if isinstance(g, list) and len(g) >= 2:
+                groups.append(frozenset(str(x).strip().lower() for x in g if str(x).strip()))
+        sg = data.get("semesterGroups")
+        if not isinstance(sg, list) or not sg:
+            sg = default_sem
+        else:
+            sg = [[str(x).strip() for x in row] for row in sg if isinstance(row, list) and row]
+            if not sg:
+                sg = default_sem
+        return {
+            "mergeNameGroups": tuple(groups),
+            "semesterGroups": sg,
+        }
+    except (json.JSONDecodeError, OSError):
+        return {
+            "mergeNameGroups": tuple(frozenset(x.lower() for x in g) for g in default_merge),
+            "semesterGroups": default_sem,
+        }
+
+
+def _merge_name_fingerprint(cleaned_name: str, merge_groups: tuple[frozenset[str], ...]) -> str:
+    """Map alias titles to one stable string so S1 Gov + S2 Econ share a merge bucket."""
+    n = cleaned_name.strip().lower()
+    if not n:
+        return ""
+    for group in merge_groups:
+        if n in group:
+            return "merge:" + "|".join(sorted(group))
+    return cleaned_name.strip()
+
+
+def _combined_display_name(cids: list[int], class_meta: dict[int, dict]) -> str:
+    """When a merged card spans different Synergy titles, show both (sorted)."""
+    names: list[str] = []
+    seen: set[str] = set()
+    for cid in sorted(cids):
+        raw = class_meta.get(cid, {}).get("Name", "")
+        cname = _clean_class_name(raw)
+        key = cname.strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            names.append(cname.strip())
+    if not names:
+        return ""
+    if len(names) == 1:
+        return names[0]
+    return " / ".join(sorted(names, key=str.lower))
+
+
 def _detect_cumulative(period_ids: dict[str, set[str]]) -> bool:
     """
     If the same assignment resultID appears in more than one marking period,
@@ -407,6 +507,64 @@ def _detect_cumulative(period_ids: dict[str, set[str]]) -> bool:
                 continue
             id_periods.setdefault(rid, []).append(pname)
     return any(len(v) > 1 for v in id_periods.values())
+
+
+def _canonical_class_key(meta: dict, merge_groups: tuple[frozenset[str], ...]) -> str:
+    """
+    Stable identity for merging S1/S2 Synergy rows that are the same enrollment
+    (different class IDs, same course + teacher after cleaning).
+    Different semester titles merge when listed in course_merge_config.json mergeNameGroups.
+    """
+    name = _clean_class_name(meta.get("Name", ""))
+    fp = _merge_name_fingerprint(name, merge_groups)
+    teacher = (meta.get("TeacherName") or "").strip().lower()
+    return f"{fp}|{teacher}"
+
+
+def _merge_semester_split_rows(
+    class_period_data: dict[int, dict[str, dict | None]],
+    class_meta: dict[int, dict],
+    period_names: list[str],
+    merge_groups: tuple[frozenset[str], ...],
+) -> tuple[dict[str, dict[str, dict | None]], dict[str, dict], dict[str, list[int]]]:
+    """
+    Group rows by canonical key; merge each period column from whichever Synergy
+    class ID has data (S1 IDs carry MP1–2, S2 IDs carry MP3–4, etc.).
+    """
+    buckets: dict[str, list[int]] = defaultdict(list)
+    for cid, meta in class_meta.items():
+        buckets[_canonical_class_key(meta, merge_groups)].append(cid)
+
+    merged_period: dict[str, dict[str, dict | None]] = {}
+    merged_meta: dict[str, dict] = {}
+    merged_sources: dict[str, list[int]] = {}
+
+    for ck, cids in buckets.items():
+        cids = sorted(cids)
+        periods_merged: dict[str, dict | None] = {}
+        for pname in period_names:
+            raw: dict | None = None
+            for cid in cids:
+                cell = class_period_data.get(cid, {}).get(pname)
+                if cell:
+                    raw = cell
+                    break
+            periods_merged[pname] = raw
+
+        if len(cids) == 1:
+            public_id = str(cids[0])
+        else:
+            public_id = hashlib.sha256(ck.encode()).hexdigest()[:16]
+
+        merged_period[public_id] = periods_merged
+        merged_sources[public_id] = cids
+        best_cid = max(
+            cids,
+            key=lambda i: sum(1 for p in period_names if class_period_data.get(i, {}).get(p)),
+        )
+        merged_meta[public_id] = class_meta[best_cid]
+
+    return merged_period, merged_meta, merged_sources
 
 
 def _clean_class_name(raw_name: str) -> str:
@@ -474,7 +632,225 @@ def _fetch_period_classes(
     return classes, raw_list
 
 
-def scrape(username: str, password: str) -> dict:
+def scrape_cards_only(username: str, password: str) -> dict:
+    """
+    Fast path: one GradebookFocusClassInfo (default period) — no GetClassData per class.
+    Grades come from class-row hints when Synergy exposes them; otherwise null until /api/class-detail.
+    """
+    session = login(username, password)
+    focus_data = get_gradebook_config(session)
+    student_gu = focus_data.get("_studentGU", "0")
+    schools = focus_data.get("Schools", [])
+    if not schools:
+        raise ParseError("No schools in GBFocusData")
+
+    school = schools[0]
+    all_periods = school.get("GradingPeriods", [])
+    regular_periods = [gp for gp in all_periods if gp.get("GroupName") == "Regular"]
+    if not regular_periods:
+        regular_periods = all_periods
+    period_names = [gp["Name"] for gp in regular_periods]
+
+    cfg = _load_course_merge_config()
+    merge_groups: tuple[frozenset[str], ...] = cfg["mergeNameGroups"]
+    semester_groups: list[list[str]] = cfg["semesterGroups"]
+
+    cls_list = get_class_list(session, focus_data)
+    classes = cls_list["classes"]
+    default_focus = next((gp for gp in regular_periods if gp.get("defaultFocus")), regular_periods[-1])
+    default_name = default_focus["Name"]
+
+    class_period_data: dict[int, dict[str, dict]] = {}
+    class_meta: dict[int, dict] = {}
+
+    for cls in classes:
+        cid = cls["ID"]
+        class_meta[cid] = cls
+        pct, letter = _class_focus_grade_hints(cls)
+        fake_raw = {
+            "students": [{"percentage": pct, "calculatedMark": letter}],
+            "assignments": [],
+            "isAssignmentWeightingOn": False,
+            "assignmentCategories": [],
+            "GradingPeriodName": default_name,
+        }
+        if cid not in class_period_data:
+            class_period_data[cid] = {}
+        class_period_data[cid][default_name] = fake_raw
+
+    merged_period_data, merged_class_meta, merged_sources = _merge_semester_split_rows(
+        class_period_data, class_meta, [default_name], merge_groups,
+    )
+
+    all_class_data = []
+    for public_id, periods in merged_period_data.items():
+        meta = merged_class_meta.get(public_id, {})
+        marking_periods = []
+        period_id_sets: dict[str, set[str]] = {}
+        for pname in period_names:
+            raw = periods.get(pname) if pname == default_name else None
+            if raw:
+                assignments = [
+                    _transform_assignment(a)
+                    for a in raw.get("assignments", [])
+                    if a.get("isForGrading", True) and not a.get("hideInPortal", False)
+                ]
+                id_set = {a["id"] for a in assignments if a["id"]}
+                period_id_sets[pname] = id_set
+                students = raw.get("students", [])
+                student_data = students[0] if students else {}
+                marking_periods.append({
+                    "label": pname,
+                    "percentage": student_data.get("percentage"),
+                    "calculatedMark": student_data.get("calculatedMark"),
+                    "assignments": assignments,
+                    "isAssignmentWeightingOn": raw.get("isAssignmentWeightingOn", False),
+                    "assignmentCategories": _transform_categories(raw),
+                })
+            else:
+                marking_periods.append({
+                    "label": pname,
+                    "percentage": None,
+                    "calculatedMark": None,
+                    "assignments": [],
+                    "isAssignmentWeightingOn": False,
+                    "assignmentCategories": [],
+                })
+
+        grading_type = "cumulative" if _detect_cumulative(period_id_sets) else "noncumulative"
+        current_mp_marking = next(
+            (mp for mp in marking_periods if mp["label"] == default_name),
+            marking_periods[-1] if marking_periods else {},
+        )
+        current_mp = periods.get(default_name)
+        current_students = (current_mp or {}).get("students", [])
+        current_student = current_students[0] if current_students else {}
+
+        src_cids = merged_sources.get(public_id, [])
+        if not src_cids and public_id.isdigit():
+            src_cids = [int(public_id)]
+        combined = _combined_display_name(src_cids, class_meta)
+        display_name = combined if combined else _clean_class_name(meta.get("Name", ""))
+
+        row = {
+            "id": public_id,
+            "name": display_name,
+            "teacherName": meta.get("TeacherName", ""),
+            "gradingType": grading_type,
+            "percentage": current_student.get("percentage"),
+            "calculatedMark": current_student.get("calculatedMark"),
+            "currentPeriod": default_name,
+            "markingPeriods": marking_periods,
+            "isAssignmentWeightingOn": current_mp_marking.get("isAssignmentWeightingOn", False),
+            "assignmentCategories": current_mp_marking.get("assignmentCategories", []),
+            "assignments": [],
+            "assignmentsLoaded": False,
+        }
+        src = merged_sources.get(public_id, [])
+        if len(src) > 1:
+            row["mergedFromIds"] = [str(x) for x in src]
+        all_class_data.append(row)
+
+    all_class_data.sort(key=lambda c: (c.get("name") or "").lower())
+
+    return {
+        "student": {"name": None},
+        "periods": period_names,
+        "classes": all_class_data,
+        "semesterGroups": semester_groups,
+        "fetchMode": "cards_only",
+    }
+
+
+def scrape_class_detail(
+    username: str,
+    password: str,
+    marking_period: str,
+    synergy_class_ids: list[int],
+) -> dict:
+    """One class + one marking period: GradebookFocusClassInfo → LoadControl → GetClassData."""
+    if not synergy_class_ids:
+        raise ParseError("synergyClassIds required")
+
+    session = login(username, password)
+    focus_data = get_gradebook_config(session)
+    student_gu = focus_data.get("_studentGU", "0")
+    schools = focus_data.get("Schools", [])
+    if not schools:
+        raise ParseError("No schools in GBFocusData")
+    school = schools[0]
+    gp = _find_grading_period_by_name(focus_data, marking_period)
+    if not gp:
+        raise ParseError(f"Unknown marking period: {marking_period}")
+
+    mark_periods = gp.get("MarkPeriods", [])
+    mark_period_gu = mark_periods[0]["GU"] if mark_periods else ""
+    focus_info = {
+        "school": school,
+        "grading_period": gp,
+        "mark_period_gu": mark_period_gu,
+    }
+
+    r = session.post(
+        f"{BASE_URL}/service/PXP2Communication.asmx/GradebookFocusClassInfo",
+        json={"request": {
+            "gradingPeriodGU": gp["GU"],
+            "AGU": "0",
+            "orgYearGU": gp["OrgYearGU"],
+            "schoolID": school["SchoolID"],
+            "markPeriodGU": mark_period_gu,
+        }},
+        headers={**JSON_HEADERS, "AGU": "0"},
+        timeout=15,
+    )
+    r.raise_for_status()
+    d = r.json().get("d", {})
+    focus_key = d.get("FOCUS_KEY", "")
+    classes = d.get("Data", {}).get("Classes", [])
+
+    last_err: Exception | None = None
+    raw: dict | None = None
+    used_cls: dict | None = None
+    for cid in synergy_class_ids:
+        cls = next((c for c in classes if c["ID"] == cid), None)
+        if not cls:
+            continue
+        try:
+            _load_class_control(session, focus_info, cls, student_gu, focus_key)
+            raw = get_class_grades(session, focus_key)
+            used_cls = cls
+            break
+        except Exception as e:
+            last_err = e
+
+    if raw is None:
+        raise StudentVueError(f"Could not load class detail: {last_err}")
+
+    assignments = [
+        _transform_assignment(a)
+        for a in raw.get("assignments", [])
+        if a.get("isForGrading", True) and not a.get("hideInPortal", False)
+    ]
+    students = raw.get("students", [])
+    student_data = students[0] if students else {}
+
+    marking_period_payload = {
+        "label": marking_period,
+        "percentage": student_data.get("percentage"),
+        "calculatedMark": student_data.get("calculatedMark"),
+        "assignments": assignments,
+        "isAssignmentWeightingOn": raw.get("isAssignmentWeightingOn", False),
+        "assignmentCategories": _transform_categories(raw),
+    }
+
+    return {
+        "markingPeriod": marking_period_payload,
+        "synergyClassIdUsed": used_cls["ID"] if used_cls else synergy_class_ids[0],
+        "fetchMode": "detail",
+    }
+
+
+def scrape(username: str, password: str, *, fetch_mode: str = "full") -> dict:
     """
     Full pipeline: login → gradebook config → all Regular marking periods → per-class grades.
     Returns a dict with 'student', 'gradingPeriods', and 'classes' keys.
@@ -496,6 +872,17 @@ def scrape(username: str, password: str) -> dict:
     regular_periods = [gp for gp in all_periods if gp.get("GroupName") == "Regular"]
     if not regular_periods:
         regular_periods = all_periods
+
+    if fetch_mode == "cards_only":
+        return scrape_cards_only(username, password)
+
+    cfg = _load_course_merge_config()
+    merge_groups: tuple[frozenset[str], ...] = cfg["mergeNameGroups"]
+    semester_groups: list[list[str]] = cfg["semesterGroups"]
+
+    if fetch_mode == "current_period_only":
+        default_gp = next((gp for gp in regular_periods if gp.get("defaultFocus")), regular_periods[-1])
+        regular_periods = [default_gp]
 
     # Fetch per-period data; collect results keyed by classId
     # Structure: {classId: {periodName: raw_data}}
@@ -524,10 +911,14 @@ def scrape(username: str, password: str) -> dict:
                 if students:
                     student_name = students[0].get("name")
 
+    merged_period_data, merged_class_meta, merged_sources = _merge_semester_split_rows(
+        class_period_data, class_meta, period_names, merge_groups
+    )
+
     # Build final classes list
     all_class_data = []
-    for cid, periods in class_period_data.items():
-        meta = class_meta.get(cid, {})
+    for public_id, periods in merged_period_data.items():
+        meta = merged_class_meta.get(public_id, {})
         marking_periods = []
 
         period_id_sets: dict[str, set[str]] = {}
@@ -575,9 +966,15 @@ def scrape(username: str, password: str) -> dict:
             marking_periods[-1] if marking_periods else {},
         )
 
-        all_class_data.append({
-            "id": str(cid),
-            "name": _clean_class_name(meta.get("Name", "")),
+        src_cids = merged_sources.get(public_id, [])
+        if not src_cids and public_id.isdigit():
+            src_cids = [int(public_id)]
+        combined = _combined_display_name(src_cids, class_meta)
+        display_name = combined if combined else _clean_class_name(meta.get("Name", ""))
+
+        row = {
+            "id": public_id,
+            "name": display_name,
             "teacherName": meta.get("TeacherName", ""),
             "gradingType": grading_type,
             "percentage": current_student.get("percentage"),
@@ -591,10 +988,20 @@ def scrape(username: str, password: str) -> dict:
                 (mp["assignments"] for mp in marking_periods if mp["label"] == default_period["Name"]),
                 [],
             ),
-        })
+            "assignmentsLoaded": True,
+        }
+        src = merged_sources.get(public_id, [])
+        if len(src) > 1:
+            row["mergedFromIds"] = [str(x) for x in src]
+        all_class_data.append(row)
 
-    return {
+    all_class_data.sort(key=lambda c: (c.get("name") or "").lower())
+
+    out = {
         "student": {"name": student_name},
         "periods": period_names,
         "classes": all_class_data,
+        "semesterGroups": semester_groups,
+        "fetchMode": fetch_mode,
     }
+    return out

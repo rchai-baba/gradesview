@@ -1,0 +1,10 @@
+{
+  "mergeNameGroups": [
+    ["Government", "Economics"],
+    ["AP Government", "AP Economics"]
+  ],
+  "semesterGroups": [
+    ["MP1", "MP2"],
+    ["MP3", "MP4"]
+  ]
+}
