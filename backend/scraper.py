@@ -10,26 +10,32 @@ Auth flow:
   5. POST GetClassData (once per class, re-calling step 4 with classID to switch focus)
 """
 
+import asyncio
 import hashlib
 import json
 import re
-import requests
+import threading
+import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from html import unescape
 from pathlib import Path
+
+import httpx
+import requests
 
 BASE_URL = "https://mi-mps.edupoint.com"
 LOGIN_URL = f"{BASE_URL}/PXP2_Login_Student.aspx?regenerateSessionId=true"
 
 BROWSER_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefox/150.0",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
     "Accept-Language": "en-US,en;q=0.9",
     "Accept-Encoding": "gzip, deflate, br",
 }
 
 JSON_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefox/150.0",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
     "Accept": "application/json, text/javascript, */*; q=0.01",
     "Content-Type": "application/json; charset=utf-8",
     "X-Requested-With": "XMLHttpRequest",
@@ -53,63 +59,166 @@ class ParseError(ScraperError):
     pass
 
 
-def login(username: str, password: str) -> requests.Session:
+# ---------------------------------------------------------------------------
+# Async Session Pool — avoids focus conflicts by using multiple sessions
+# ---------------------------------------------------------------------------
+
+class AsyncSessionPool:
+    def __init__(self, username, password, size=6):
+        self.username = username
+        self.password = password
+        self.size = size
+        self.clients = []
+        self.available = asyncio.Queue()
+        self.initialized = False
+
+    async def initialize(self):
+        if self.initialized:
+            return
+        # Create and login all sessions in parallel, but keep pool small to avoid server/proxy timeouts
+        self.clients = [httpx.AsyncClient(timeout=30) for _ in range(self.size)]
+        
+        async def _login_staggered(client, i):
+            await asyncio.sleep(i * 0.2)  # Very slight stagger
+            await async_login(self.username, self.password, client)
+            self.available.put_nowait(client)
+
+        print(f"[Pool] Initializing {self.size} sessions...")
+        tasks = [_login_staggered(c, i) for i, c in enumerate(self.clients)]
+        await asyncio.gather(*tasks)
+        self.initialized = True
+        print(f"[Pool] All {self.size} sessions authenticated.")
+
+    async def acquire(self) -> httpx.AsyncClient:
+        return await self.available.get()
+
+    async def release(self, client: httpx.AsyncClient):
+        self.available.put_nowait(client)
+
+    async def close(self):
+        for client in self.clients:
+            await client.aclose()
+
+
+_SESSION_TTL = 1200  # seconds
+_session_cache: dict[str, tuple[requests.Session, dict, float]] = {}
+_session_lock = threading.Lock()
+
+
+def _cache_key(username: str, password: str) -> str:
+    return hashlib.sha256(f"{username}:{password}".encode()).hexdigest()
+
+
+def _get_or_create_session(username: str, password: str) -> tuple[requests.Session, dict]:
+    """
+    Return a cached (session, focus_data) if still fresh, otherwise login + get_gradebook_config.
+    Saves ~4 serial HTTP round-trips on every call after the first.
+    """
+    key = _cache_key(username, password)
+    now = time.monotonic()
+    with _session_lock:
+        entry = _session_cache.get(key)
+        if entry:
+            session, focus_data, ts = entry
+            if now - ts < _SESSION_TTL:
+                return session, focus_data
+    session = login(username, password)
+    focus_data = get_gradebook_config(session)
+    with _session_lock:
+        _session_cache[key] = (session, focus_data, now)
+    return session, focus_data
+
+
+def _invalidate_session(username: str, password: str) -> None:
+    key = _cache_key(username, password)
+    with _session_lock:
+        _session_cache.pop(key, None)
+
+
+def _get_session_with_retry(username: str, password: str) -> tuple[requests.Session, dict]:
+    """Like _get_or_create_session but evicts and retries once on any error."""
+    try:
+        return _get_or_create_session(username, password)
+    except (StudentVueError, ParseError):
+        _invalidate_session(username, password)
+        session = login(username, password)
+        focus_data = get_gradebook_config(session)
+        key = _cache_key(username, password)
+        with _session_lock:
+            _session_cache[key] = (session, focus_data, time.monotonic())
+        return session, focus_data
+
+
+async def async_login(username: str, password: str, client: httpx.AsyncClient) -> None:
     """
     Steps 1-2: GET login page for ASP.NET tokens, then POST credentials.
-    Returns an authenticated requests.Session.
+    Sets cookies on the provided httpx.AsyncClient.
     Raises LoginError on bad credentials, StudentVueError on network/server issues.
     """
-    session = requests.Session()
-
     try:
-        r = session.get(LOGIN_URL, headers=BROWSER_HEADERS, timeout=15)
+        r = await client.get(LOGIN_URL, headers=BROWSER_HEADERS, timeout=15)
         r.raise_for_status()
-    except requests.Timeout:
+    except httpx.TimeoutException:
         raise StudentVueError("Timed out connecting to StudentVue")
-    except requests.RequestException as e:
+    except httpx.RequestError as e:
         raise StudentVueError(f"Could not reach StudentVue: {e}")
 
-    viewstate = re.search(r'id="__VIEWSTATE"\s+value="([^"]*)"', r.text)
-    viewstate_gen = re.search(r'id="__VIEWSTATEGENERATOR"\s+value="([^"]*)"', r.text)
-    event_validation = re.search(r'id="__EVENTVALIDATION"\s+value="([^"]*)"', r.text)
+    # Use a more robust token extraction that handles attribute order and quoting variations
+    def find_token(name, html):
+        # Case 1: id="__TOKEN" ... value="VAL"
+        m = re.search(f'id="{name}".*?value="([^"]*)"', html, re.DOTALL)
+        if m: return m.group(1)
+        # Case 2: name="__TOKEN" ... value="VAL"
+        m = re.search(f'name="{name}".*?value="([^"]*)"', html, re.DOTALL)
+        if m: return m.group(1)
+        # Case 3: value="VAL" ... id/name="__TOKEN"
+        m = re.search(f'value="([^"]*)".*?(id|name)="{name}"', html, re.DOTALL)
+        if m: return m.group(1)
+        return None
 
-    if not viewstate or not event_validation:
-        raise StudentVueError("Could not extract ASP.NET form tokens from login page")
+    vs_val = find_token("__VIEWSTATE", r.text)
+    ev_val = find_token("__EVENTVALIDATION", r.text)
+    vsg_val = find_token("__VIEWSTATEGENERATOR", r.text) or ""
+
+    if vs_val is None or ev_val is None:
+        print(f"  [Error] Failed to extract tokens. HTML sample: {r.text[:500]}")
+        raise StudentVueError("Could not extract ASP.NET form tokens. The portal layout might have changed or access is blocked.")
 
     form_data = {
-        "__VIEWSTATE": viewstate.group(1),
-        "__VIEWSTATEGENERATOR": viewstate_gen.group(1) if viewstate_gen else "",
-        "__EVENTVALIDATION": event_validation.group(1),
+        "__VIEWSTATE": vs_val,
+        "__VIEWSTATEGENERATOR": vsg_val,
+        "__EVENTVALIDATION": ev_val,
         "ctl00$MainContent$username": username,
         "ctl00$MainContent$password": password,
         "ctl00$MainContent$Submit1": "Login",
     }
 
+    print(f"  [Login] Sending credentials for {username}...")
     try:
-        r = session.post(
+        r = await client.post(
             LOGIN_URL,
             data=form_data,
             headers={**BROWSER_HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
-            timeout=15,
-            allow_redirects=True,
+            timeout=30,
+            follow_redirects=True,
         )
         r.raise_for_status()
-    except requests.Timeout:
+    except httpx.TimeoutException:
+        print("  [Error] Login POST timed out")
         raise StudentVueError("Timed out during login POST")
-    except requests.RequestException as e:
+    except httpx.RequestError as e:
+        print(f"  [Error] Login POST failed: {e}")
         raise StudentVueError(f"Login POST failed: {e}")
 
-    if "Home_PXP2.aspx" not in r.url and "Home_PXP2" not in r.text:
-        if "login" in r.url.lower():
+    if "Home_PXP2.aspx" not in str(r.url) and "Home_PXP2" not in r.text:
+        if "login" in str(r.url).lower():
             raise LoginError("Invalid credentials")
         # Ambiguous — treat as success if we have a session cookie
-        if "ASP.NET_SessionId" not in session.cookies:
+        if "ASP.NET_SessionId" not in client.cookies:
             raise LoginError("Login did not produce a session cookie")
 
-    return session
 
-
-def get_gradebook_config(session: requests.Session) -> dict:
+async def async_get_gradebook_config(client: httpx.AsyncClient) -> dict:
     """
     Step 3: Get studentGU, then load gradebook page and extract GBFocusData.
     Returns the parsed GBFocusData dict.
@@ -118,7 +227,7 @@ def get_gradebook_config(session: requests.Session) -> dict:
     # Get studentGU from student summary endpoint
     student_gu = "0"
     try:
-        r = session.post(
+        r = await client.post(
             f"{BASE_URL}/Service/RTCommunication.asmx/XMLDoRequest?PORTAL=StudentVUE",
             data="xml=%3CREV_REQUEST%3E%3CEVENT+NAME%3D%22PXP_Get_StudentSummary%22%3E%3CREQUEST+WINDOW_ID%3D%22test%22%3E%3C%2FREQUEST%3E%3C%2FEVENT%3E%3C%2FREV_REQUEST%3E",
             headers={
@@ -132,20 +241,20 @@ def get_gradebook_config(session: requests.Session) -> dict:
             gu_match = re.search(r'"studentGU":"([^"]+)"', r.text)
             if gu_match:
                 student_gu = gu_match.group(1)
-    except requests.RequestException:
+    except httpx.RequestError:
         pass  # Fall back to studentGU=0
 
     # Load gradebook page
     try:
-        r = session.get(
+        r = await client.get(
             f"{BASE_URL}/PXP2_Gradebook.aspx?AGU=0&studentGU={student_gu}",
             headers=BROWSER_HEADERS,
-            timeout=15,
+            timeout=30,
         )
         r.raise_for_status()
-    except requests.Timeout:
+    except httpx.TimeoutException:
         raise StudentVueError("Timed out loading gradebook page")
-    except requests.RequestException as e:
+    except httpx.RequestError as e:
         raise StudentVueError(f"Failed to load gradebook page: {e}")
 
     # Extract GBFocusData JSON blob
@@ -184,8 +293,21 @@ def _get_focus_info(focus_data: dict) -> dict:
     if not schools:
         raise ParseError("No schools found in GBFocusData")
 
-    school = schools[0]
+    # Find first school with a valid SchoolID (try different casings)
+    school = None
+    for s in schools:
+        s_id = s.get("SchoolID", s.get("SchoolId"))
+        if s_id:
+            s["SchoolID"] = s_id  # Normalize
+            school = s
+            break
+    if not school:
+        school = schools[0]
+        school["SchoolID"] = school.get("SchoolID", school.get("SchoolId", ""))
+
     grading_periods = school.get("GradingPeriods", [])
+    if not grading_periods:
+        raise ParseError("No grading periods found for this school")
 
     # Find the default grading period, or fall back to last Regular one
     target_gp = next((gp for gp in grading_periods if gp.get("defaultFocus")), None)
@@ -193,8 +315,15 @@ def _get_focus_info(focus_data: dict) -> dict:
         regular_gps = [gp for gp in grading_periods if gp.get("GroupName") == "Regular"]
         target_gp = regular_gps[-1] if regular_gps else grading_periods[-1]
 
+    # Normalize grading period identifiers
+    target_gp["GU"] = target_gp.get("GU", target_gp.get("Gu", ""))
+    target_gp["OrgYearGU"] = target_gp.get("OrgYearGU", target_gp.get("OrgYearGu", ""))
+
     mark_periods = target_gp.get("MarkPeriods", [])
-    mark_period_gu = mark_periods[0]["GU"] if mark_periods else ""
+    mark_period_gu = ""
+    if mark_periods:
+        mp = mark_periods[0]
+        mark_period_gu = mp.get("GU", mp.get("Gu", ""))
 
     return {
         "school": school,
@@ -233,7 +362,7 @@ def _find_grading_period_by_name(focus_data: dict, period_name: str) -> dict | N
     return None
 
 
-def get_class_list(session: requests.Session, focus_data: dict) -> dict:
+async def async_get_class_list(client: httpx.AsyncClient, focus_data: dict) -> dict:
     """
     Step 4: Get the list of classes for the current grading period.
     Returns {"classes": [...], "focus_key": "...", "focus_info": {...}}.
@@ -244,25 +373,31 @@ def get_class_list(session: requests.Session, focus_data: dict) -> dict:
 
     payload = {
         "request": {
-            "gradingPeriodGU": gp["GU"],
+            "gradingPeriodGU": gp.get("GU"),
             "AGU": "0",
-            "orgYearGU": gp["OrgYearGU"],
-            "schoolID": school["SchoolID"],
+            "orgYearGU": gp.get("OrgYearGU"),
+            "schoolID": school.get("SchoolID"),
             "markPeriodGU": focus_info["mark_period_gu"],
         }
     }
 
     try:
-        r = session.post(
+        r = await client.post(
             f"{BASE_URL}/service/PXP2Communication.asmx/GradebookFocusClassInfo",
-            json=payload,
-            headers={**JSON_HEADERS, "AGU": "0"},
-            timeout=15,
+            content=json.dumps(payload),
+            headers={
+                **JSON_HEADERS,
+                "AGU": "0",
+                "Referer": f"{BASE_URL}/PXP2_Gradebook.aspx",
+            },
+            timeout=30,
         )
         r.raise_for_status()
-    except requests.Timeout:
-        raise StudentVueError("Timed out fetching class list")
-    except requests.RequestException as e:
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 500:
+            raise StudentVueError(f"Server error '500 Internal Server Error' for url '{e.request.url}'. This often means a session timeout or a malformed payload.")
+        raise StudentVueError(f"Failed to fetch class list: {e}")
+    except httpx.RequestError as e:
         raise StudentVueError(f"Failed to fetch class list: {e}")
 
     data = r.json()
@@ -278,6 +413,26 @@ def get_class_list(session: requests.Session, focus_data: dict) -> dict:
         "focus_key": focus_key,
         "focus_info": focus_info,
     }
+
+
+def _parse_current_grade_from_html(html: str) -> tuple[float | None, str | None]:
+    """
+    Parse the displayed current grade from LoadControl HTML.
+    Looks for the <div id="current-grade"> block which contains:
+      <div class="mark">A</div>
+      <div class="score">97.87%</div>
+    Returns (percentage, letter) or (None, None).
+    """
+    mark_m = re.search(r'id="current-grade".*?class="mark"[^>]*>\s*([^<\s][^<]*)', html, re.DOTALL)
+    score_m = re.search(r'id="current-grade".*?class="score"[^>]*>\s*([\d.]+)%', html, re.DOTALL)
+    letter = mark_m.group(1).strip() if mark_m else None
+    pct: float | None = None
+    if score_m:
+        try:
+            pct = float(score_m.group(1))
+        except ValueError:
+            pass
+    return pct, letter
 
 
 def _parse_titles_from_html(html: str) -> dict[int, str]:
@@ -314,8 +469,8 @@ def _parse_titles_from_html(html: str) -> dict[int, str]:
     return titles
 
 
-def _load_class_control_raw_html(
-    session: requests.Session,
+async def async_load_class_control_raw_html(
+    client: httpx.AsyncClient,
     focus_info: dict,
     cls: dict,
     student_gu: str,
@@ -331,33 +486,38 @@ def _load_class_control_raw_html(
             "parameters": {
                 "viewName": None,
                 "studentGU": student_gu,
-                "schoolID": school["SchoolID"],
+                "schoolID": school.get("SchoolID"),
                 "classID": cls["ID"],
                 "markPeriodGU": focus_info["mark_period_gu"],
-                "gradePeriodGU": gp["GU"],
+                "gradePeriodGU": gp.get("GU"),
                 "subjectID": -1,
                 "teacherID": -1,
                 "assignmentID": -1,
                 "standardIdentifier": None,
                 "AGU": "0",
-                "OrgYearGU": gp["OrgYearGU"],
+                "OrgYearGU": gp.get("OrgYearGU"),
                 "gradingPeriodGroup": None,
             },
         }
     }
 
-    r = session.post(
+    r = await client.post(
         f"{BASE_URL}/service/PXP2Communication.asmx/LoadControl",
-        json=payload,
-        headers={**JSON_HEADERS, "AGU": "0", "FOCUS_KEY": focus_key},
-        timeout=15,
+        content=json.dumps(payload),
+        headers={
+            **JSON_HEADERS,
+            "AGU": "0",
+            "FOCUS_KEY": focus_key,
+            "Referer": f"{BASE_URL}/PXP2_Gradebook.aspx",
+        },
+        timeout=30,
     )
     r.raise_for_status()
     return r.json().get("d", {}).get("Data", {}).get("html", "")
 
 
-def _load_class_control(
-    session: requests.Session,
+async def async_load_class_control(
+    client: httpx.AsyncClient,
     focus_info: dict,
     cls: dict,
     student_gu: str,
@@ -366,50 +526,16 @@ def _load_class_control(
     """
     Replicates the browser's GB.LoadControl click handler — POSTs to LoadControl
     with the full FocusArgs (including classID) to set the server-side focus.
-    After this call, GetClassData with Parameters '{}' returns that class's data.
-    Also parses assignment titles from the HTML response.
-    Returns {gradeBookId: title} map (may be empty if HTML has no assignments).
+    Returns {gradeBookId: title} map.
     """
-    school = focus_info["school"]
-    gp = focus_info["grading_period"]
-
-    payload = {
-        "request": {
-            "control": "Gradebook_ClassDetails",
-            "parameters": {
-                "viewName": None,
-                "studentGU": student_gu,
-                "schoolID": school["SchoolID"],
-                "classID": cls["ID"],
-                "markPeriodGU": focus_info["mark_period_gu"],
-                "gradePeriodGU": gp["GU"],
-                "subjectID": -1,
-                "teacherID": -1,
-                "assignmentID": -1,
-                "standardIdentifier": None,
-                "AGU": "0",
-                "OrgYearGU": gp["OrgYearGU"],
-                "gradingPeriodGroup": None,
-            },
-        }
-    }
-
-    r = session.post(
-        f"{BASE_URL}/service/PXP2Communication.asmx/LoadControl",
-        json=payload,
-        headers={**JSON_HEADERS, "AGU": "0", "FOCUS_KEY": focus_key},
-        timeout=15,
-    )
-    r.raise_for_status()
-
     try:
-        html = r.json().get("d", {}).get("Data", {}).get("html", "")
+        html = await async_load_class_control_raw_html(client, focus_info, cls, student_gu, focus_key)
         return _parse_titles_from_html(html)
     except Exception:
         return {}
 
 
-def get_class_grades(session: requests.Session, focus_key: str) -> dict:
+async def async_get_class_grades(client: httpx.AsyncClient, focus_key: str) -> dict:
     """
     Step 5: Fetch grade data for the currently server-focused class.
     Call _load_class_control first to switch focus to the desired class.
@@ -426,16 +552,19 @@ def get_class_grades(session: requests.Session, focus_key: str) -> dict:
     }
 
     try:
-        r = session.post(
+        r = await client.post(
             f"{BASE_URL}/api/GB/ClientSideData/Transfer?action=genericdata.classdata-GetClassData",
-            json=payload,
-            headers=headers,
-            timeout=15,
+            content=json.dumps(payload),
+            headers={
+                **headers,
+                "Referer": f"{BASE_URL}/PXP2_Gradebook.aspx",
+            },
+            timeout=30,
         )
         r.raise_for_status()
-    except requests.Timeout:
+    except httpx.TimeoutException:
         raise StudentVueError("Timed out fetching class grades")
-    except requests.RequestException as e:
+    except httpx.RequestError as e:
         raise StudentVueError(f"Failed to fetch class grades: {e}")
 
     return r.json()
@@ -685,487 +814,433 @@ def _clean_class_name(raw_name: str) -> str:
     return name.strip()
 
 
-def _fetch_period_classes(
-    session: requests.Session,
-    focus_data: dict,
-    grading_period: dict,
-    student_gu: str,
-) -> tuple[list[dict], list[dict | None]]:
+def _fetch_one_class_worker(
+    username: str,
+    password: str,
+    grading_period_name: str,
+    cls_id: int,
+    focus_data_ro: dict,
+) -> tuple[int, dict | None]:
     """
-    For a single grading period: call GradebookFocusClassInfo to get FOCUS_KEY + class list,
-    then LoadControl + GetClassData for each class.
-    Returns (classes, raw_grade_data_list) — parallel lists, raw entries may be None on failure.
+    Worker: logs in with its own session so each class gets independent server-side focus state.
+    Returns (cls_id, raw_grade_data | None).
+    focus_data_ro is the already-parsed GBFocusData from the main session (read-only: GU strings only).
     """
-    school = focus_data["Schools"][0]
-    mark_periods = grading_period.get("MarkPeriods", [])
-    mark_period_gu = mark_periods[0]["GU"] if mark_periods else ""
+    try:
+        session = login(username, password)
+        school = focus_data_ro["Schools"][0]
+        gp = _find_grading_period_by_name(focus_data_ro, grading_period_name)
+        if not gp:
+            return cls_id, None
+        student_gu = focus_data_ro.get("_studentGU", "0")
+        mark_periods = gp.get("MarkPeriods", [])
+        mark_period_gu = mark_periods[0]["GU"] if mark_periods else ""
+        focus_info = {"school": school, "grading_period": gp, "mark_period_gu": mark_period_gu}
 
-    r = session.post(
-        f"{BASE_URL}/service/PXP2Communication.asmx/GradebookFocusClassInfo",
-        json={"request": {
-            "gradingPeriodGU": grading_period["GU"],
-            "AGU": "0",
-            "orgYearGU": grading_period["OrgYearGU"],
-            "schoolID": school["SchoolID"],
-            "markPeriodGU": mark_period_gu,
-        }},
-        headers={**JSON_HEADERS, "AGU": "0"},
-        timeout=15,
-    )
-    r.raise_for_status()
-    d = r.json().get("d", {})
-    focus_key = d.get("FOCUS_KEY", "")
-    classes = d.get("Data", {}).get("Classes", [])
-
-    focus_info = {
-        "school": school,
-        "grading_period": grading_period,
-        "mark_period_gu": mark_period_gu,
-    }
-
-    raw_list = []
-    for cls in classes:
-        try:
-            title_map = _load_class_control(session, focus_info, cls, student_gu, focus_key)
-            raw = get_class_grades(session, focus_key)
-            raw["_titleMap"] = title_map  # attach so _transform_assignment can use it
-            raw_list.append(raw)
-        except Exception:
-            raw_list.append(None)
-
-    return classes, raw_list
-
-
-def scrape_cards_only(username: str, password: str) -> dict:
-    """
-    Fast path: one GradebookFocusClassInfo (default period) — no GetClassData per class.
-    Grades come from class-row hints when Synergy exposes them; otherwise null until /api/class-detail.
-    """
-    session = login(username, password)
-    focus_data = get_gradebook_config(session)
-    student_gu = focus_data.get("_studentGU", "0")
-    schools = focus_data.get("Schools", [])
-    if not schools:
-        raise ParseError("No schools in GBFocusData")
-
-    school = schools[0]
-    all_periods = school.get("GradingPeriods", [])
-    regular_periods = [gp for gp in all_periods if gp.get("GroupName") == "Regular"]
-    if not regular_periods:
-        regular_periods = all_periods
-    period_names = [gp["Name"] for gp in regular_periods]
-
-    cfg = _load_course_merge_config()
-    merge_groups: tuple[frozenset[str], ...] = cfg["mergeNameGroups"]
-    semester_groups: list[list[str]] = cfg["semesterGroups"]
-
-    cls_list = get_class_list(session, focus_data)
-    classes = cls_list["classes"]
-    default_focus = next((gp for gp in regular_periods if gp.get("defaultFocus")), regular_periods[-1])
-    default_name = default_focus["Name"]
-
-    class_period_data: dict[int, dict[str, dict]] = {}
-    class_meta: dict[int, dict] = {}
-
-    for cls in classes:
-        cid = cls["ID"]
-        class_meta[cid] = cls
-        pct, letter = _class_focus_grade_hints(cls)
-        fake_raw = {
-            "students": [{"percentage": pct, "calculatedMark": letter}],
-            "assignments": [],
-            "isAssignmentWeightingOn": False,
-            "assignmentCategories": [],
-            "GradingPeriodName": default_name,
-        }
-        if cid not in class_period_data:
-            class_period_data[cid] = {}
-        class_period_data[cid][default_name] = fake_raw
-
-    merged_period_data, merged_class_meta, merged_sources = _merge_semester_split_rows(
-        class_period_data, class_meta, [default_name], merge_groups,
-    )
-
-    all_class_data = []
-    for public_id, periods in merged_period_data.items():
-        meta = merged_class_meta.get(public_id, {})
-        marking_periods = []
-        period_id_sets: dict[str, set[str]] = {}
-        for pname in period_names:
-            raw = periods.get(pname) if pname == default_name else None
-            if raw:
-                assignments = [
-                    _transform_assignment(a, raw.get("_titleMap"))
-                    for a in raw.get("assignments", [])
-                    if a.get("isForGrading", True) and not a.get("hideInPortal", False)
-                ]
-                id_set = {a["id"] for a in assignments if a["id"]}
-                period_id_sets[pname] = id_set
-                students = raw.get("students", [])
-                student_data = students[0] if students else {}
-                marking_periods.append({
-                    "label": pname,
-                    "percentage": student_data.get("percentage"),
-                    "calculatedMark": student_data.get("calculatedMark"),
-                    "assignments": assignments,
-                    "isAssignmentWeightingOn": raw.get("isAssignmentWeightingOn", False),
-                    "assignmentCategories": _transform_categories(raw),
-                })
-            else:
-                marking_periods.append({
-                    "label": pname,
-                    "percentage": None,
-                    "calculatedMark": None,
-                    "assignments": [],
-                    "isAssignmentWeightingOn": False,
-                    "assignmentCategories": [],
-                })
-
-        grading_type = "cumulative" if _detect_cumulative(period_id_sets) else "noncumulative"
-        current_mp_marking = next(
-            (mp for mp in marking_periods if mp["label"] == default_name),
-            marking_periods[-1] if marking_periods else {},
+        # Get FOCUS_KEY for this independent session
+        r = session.post(
+            f"{BASE_URL}/service/PXP2Communication.asmx/GradebookFocusClassInfo",
+            json={"request": {
+                "gradingPeriodGU": gp.get("GU"),
+                "AGU": "0",
+                "orgYearGU": gp.get("OrgYearGU"),
+                "schoolID": school.get("SchoolID"),
+                "markPeriodGU": mark_period_gu,
+            }},
+            headers={**JSON_HEADERS, "AGU": "0"},
+            timeout=15,
         )
-        current_mp = periods.get(default_name)
-        current_students = (current_mp or {}).get("students", [])
-        current_student = current_students[0] if current_students else {}
+        r.raise_for_status()
+        d = r.json().get("d", {})
+        focus_key = d.get("FOCUS_KEY", "")
+        classes = d.get("Data", {}).get("Classes", [])
+        cls_obj = next((c for c in classes if c["ID"] == cls_id), None)
+        if not cls_obj:
+            return cls_id, None
 
-        src_cids = merged_sources.get(public_id, [])
-        if not src_cids and public_id.isdigit():
-            src_cids = [int(public_id)]
-        combined = _combined_display_name(src_cids, class_meta)
-        display_name = combined if combined else _clean_class_name(meta.get("Name", ""))
+        title_map = _load_class_control(session, focus_info, cls_obj, student_gu, focus_key)
+        raw = get_class_grades(session, focus_key)
+        raw["_titleMap"] = title_map
+        return cls_id, raw
+    except Exception:
+        return cls_id, None
 
-        row = {
-            "id": public_id,
-            "name": display_name,
-            "teacherName": meta.get("TeacherName", ""),
-            "gradingType": grading_type,
-            "percentage": current_student.get("percentage"),
-            "calculatedMark": current_student.get("calculatedMark"),
-            "currentPeriod": default_name,
-            "markingPeriods": marking_periods,
-            "isAssignmentWeightingOn": current_mp_marking.get("isAssignmentWeightingOn", False),
-            "assignmentCategories": current_mp_marking.get("assignmentCategories", []),
-            "assignments": [],
-            "assignmentsLoaded": False,
+
+async def async_scrape_cards_only(username: str, password: str) -> dict:
+    """Fast path: one GradebookFocusClassInfo (default period) — no GetClassData per class."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        await async_login(username, password, client)
+        focus_data = await async_get_gradebook_config(client)
+        student_gu = focus_data.get("_studentGU", "0")
+        schools = focus_data.get("Schools", [])
+        if not schools:
+            raise ParseError("No schools in GBFocusData")
+
+        school = schools[0]
+        all_periods = school.get("GradingPeriods", [])
+        regular_periods = [gp for gp in all_periods if gp.get("GroupName") == "Regular"]
+        if not regular_periods:
+            regular_periods = all_periods
+        period_names = [gp["Name"] for gp in regular_periods]
+
+        cfg = _load_course_merge_config()
+        merge_groups: tuple[frozenset[str], ...] = cfg["mergeNameGroups"]
+        semester_groups: list[list[str]] = cfg["semesterGroups"]
+
+        cls_list = await async_get_class_list(client, focus_data)
+        classes = cls_list["classes"]
+        focus_key = cls_list["focus_key"]
+        focus_info = cls_list["focus_info"]
+        default_focus = next((gp for gp in regular_periods if gp.get("defaultFocus")), regular_periods[-1])
+        default_name = default_focus["Name"]
+
+        class_period_data: dict[int, dict[str, dict]] = {}
+        class_meta: dict[int, dict] = {}
+
+        async def _fetch_card(cls: dict) -> tuple[int, float | None, str | None]:
+            try:
+                html = await async_load_class_control_raw_html(client, focus_info, cls, student_gu, focus_key)
+                pct, letter = _parse_current_grade_from_html(html)
+                if pct is None and letter is None:
+                    pct, letter = _class_focus_grade_hints(cls)
+                return cls["ID"], pct, letter
+            except Exception:
+                pct, letter = _class_focus_grade_hints(cls)
+                return cls["ID"], pct, letter
+
+        # Cards only can use ONE session because it only calls LoadControl (no focus conflict)
+        card_tasks = [_fetch_card(cls) for cls in classes]
+        card_results_list = await asyncio.gather(*card_tasks)
+        card_results = {cid: (pct, letter) for cid, pct, letter in card_results_list}
+
+        for cls in classes:
+            cid = cls["ID"]
+            class_meta[cid] = cls
+            pct, letter = card_results.get(cid, (None, None))
+            fake_raw = {
+                "students": [{"percentage": pct, "calculatedMark": letter}],
+                "assignments": [],
+                "isAssignmentWeightingOn": False,
+                "assignmentCategories": [],
+                "GradingPeriodName": default_name,
+            }
+            if cid not in class_period_data:
+                class_period_data[cid] = {}
+            class_period_data[cid][default_name] = fake_raw
+
+        merged_period_data, merged_class_meta, merged_sources = _merge_semester_split_rows(
+            class_period_data, class_meta, [default_name], merge_groups,
+        )
+
+        all_class_data = []
+        for public_id, periods in merged_period_data.items():
+            meta = merged_class_meta.get(public_id, {})
+            marking_periods = []
+            period_id_sets: dict[str, set[str]] = {}
+            for pname in period_names:
+                raw = periods.get(pname) if pname == default_name else None
+                if raw:
+                    assignments = [
+                        _transform_assignment(a, raw.get("_titleMap"))
+                        for a in raw.get("assignments", [])
+                        if a.get("isForGrading", True) and not a.get("hideInPortal", False)
+                    ]
+                    id_set = {a["id"] for a in assignments if a["id"]}
+                    period_id_sets[pname] = id_set
+                    students = raw.get("students", [])
+                    student_data = students[0] if students else {}
+                    marking_periods.append({
+                        "label": pname,
+                        "percentage": student_data.get("percentage"),
+                        "calculatedMark": student_data.get("calculatedMark"),
+                        "assignments": assignments,
+                        "isAssignmentWeightingOn": raw.get("isAssignmentWeightingOn", False),
+                        "assignmentCategories": _transform_categories(raw),
+                    })
+                else:
+                    marking_periods.append({
+                        "label": pname,
+                        "percentage": None,
+                        "calculatedMark": None,
+                        "assignments": [],
+                        "isAssignmentWeightingOn": False,
+                        "assignmentCategories": [],
+                    })
+
+            grading_type = "cumulative" if _detect_cumulative(period_id_sets) else "noncumulative"
+            current_mp_marking = next(
+                (mp for mp in marking_periods if mp["label"] == default_name),
+                marking_periods[-1] if marking_periods else {},
+            )
+            current_mp = periods.get(default_name)
+            current_students = (current_mp or {}).get("students", [])
+            current_student = current_students[0] if current_students else {}
+
+            src_cids = merged_sources.get(public_id, [])
+            if not src_cids and public_id.isdigit():
+                src_cids = [int(public_id)]
+            combined = _combined_display_name(src_cids, class_meta)
+            display_name = combined if combined else _clean_class_name(meta.get("Name", ""))
+
+            row = {
+                "id": public_id,
+                "name": display_name,
+                "teacherName": meta.get("TeacherName", ""),
+                "gradingType": grading_type,
+                "percentage": current_student.get("percentage"),
+                "calculatedMark": current_student.get("calculatedMark"),
+                "currentPeriod": default_name,
+                "markingPeriods": marking_periods,
+                "isAssignmentWeightingOn": current_mp_marking.get("isAssignmentWeightingOn", False),
+                "assignmentCategories": current_mp_marking.get("assignmentCategories", []),
+                "assignments": [],
+                "assignmentsLoaded": False,
+            }
+            src = merged_sources.get(public_id, [])
+            if len(src) > 1:
+                row["mergedFromIds"] = [str(x) for x in src]
+            all_class_data.append(row)
+
+        all_class_data.sort(key=lambda c: (c.get("name") or "").lower())
+
+        return {
+            "student": {"name": None},
+            "periods": period_names,
+            "classes": all_class_data,
+            "semesterGroups": semester_groups,
+            "fetchMode": "cards_only",
         }
-        src = merged_sources.get(public_id, [])
-        if len(src) > 1:
-            row["mergedFromIds"] = [str(x) for x in src]
-        all_class_data.append(row)
-
-    all_class_data.sort(key=lambda c: (c.get("name") or "").lower())
-
-    return {
-        "student": {"name": None},
-        "periods": period_names,
-        "classes": all_class_data,
-        "semesterGroups": semester_groups,
-        "fetchMode": "cards_only",
-    }
 
 
-def scrape_class_detail(
+async def async_scrape_class_detail(
     username: str,
     password: str,
     marking_period: str,
     synergy_class_ids: list[int],
 ) -> dict:
-    """One class + one marking period: GradebookFocusClassInfo → LoadControl → GetClassData."""
-    if not synergy_class_ids:
-        raise ParseError("synergyClassIds required")
+    """One class + one marking period async."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        await async_login(username, password, client)
+        focus_data = await async_get_gradebook_config(client)
+        student_gu = focus_data.get("_studentGU", "0")
+        schools = focus_data.get("Schools", [])
+        if not schools:
+            raise ParseError("No schools in GBFocusData")
+        school = schools[0]
+        gp = _find_grading_period_by_name(focus_data, marking_period)
+        if not gp:
+            raise ParseError(f"Unknown marking period: {marking_period}")
 
-    session = login(username, password)
-    focus_data = get_gradebook_config(session)
-    student_gu = focus_data.get("_studentGU", "0")
-    schools = focus_data.get("Schools", [])
-    if not schools:
-        raise ParseError("No schools in GBFocusData")
-    school = schools[0]
-    gp = _find_grading_period_by_name(focus_data, marking_period)
-    if not gp:
-        raise ParseError(f"Unknown marking period: {marking_period}")
+        mark_periods = gp.get("MarkPeriods", [])
+        mark_period_gu = mark_periods[0]["GU"] if mark_periods else ""
+        focus_info = {"school": school, "grading_period": gp, "mark_period_gu": mark_period_gu}
 
-    mark_periods = gp.get("MarkPeriods", [])
-    mark_period_gu = mark_periods[0]["GU"] if mark_periods else ""
-    focus_info = {
-        "school": school,
-        "grading_period": gp,
-        "mark_period_gu": mark_period_gu,
-    }
-
-    r = session.post(
-        f"{BASE_URL}/service/PXP2Communication.asmx/GradebookFocusClassInfo",
-        json={"request": {
-            "gradingPeriodGU": gp["GU"],
-            "AGU": "0",
-            "orgYearGU": gp["OrgYearGU"],
-            "schoolID": school["SchoolID"],
-            "markPeriodGU": mark_period_gu,
-        }},
-        headers={**JSON_HEADERS, "AGU": "0"},
-        timeout=15,
-    )
-    r.raise_for_status()
-    d = r.json().get("d", {})
-    focus_key = d.get("FOCUS_KEY", "")
-    classes = d.get("Data", {}).get("Classes", [])
-
-    last_err: Exception | None = None
-    raw: dict | None = None
-    used_cls: dict | None = None
-    for cid in synergy_class_ids:
-        cls = next((c for c in classes if c["ID"] == cid), None)
-        if not cls:
-            continue
-        try:
-            title_map = _load_class_control(session, focus_info, cls, student_gu, focus_key)
-            raw = get_class_grades(session, focus_key)
-            raw["_titleMap"] = title_map
-            used_cls = cls
-            break
-        except Exception as e:
-            last_err = e
-
-    if raw is None:
-        raise StudentVueError(f"Could not load class detail: {last_err}")
-
-    # Short, safe dump of raw data for debugging
-    import json
-    with open("debug_raw.json", "w", encoding="utf-8") as f:
-        f.write(json.dumps(raw, indent=2)[:5000])
-    print("Preview saved to debug_raw.json")
-
-    # Map metadata by assignmentID for quick lookup
-    meta_map = {
-        str(m.get("assignmentID", m.get("AssignmentID", ""))): m
-        for m in (raw.get("Assignments") or [])
-    }
-
-    # Merge metadata into score records before transforming
-    assignments = []
-    for a in raw.get("assignments", []):
-        if not a.get("isForGrading", True) or a.get("hideInPortal", False):
-            continue
-        aid = str(a.get("assignmentID", a.get("AssignmentID", "")))
-        if aid in meta_map:
-            # Merge: metadata into score object
-            a = {**a, **meta_map[aid]}
-        assignments.append(_transform_assignment(a, raw.get("_titleMap")))
-
-    students = raw.get("students", [])
-    student_data = students[0] if students else {}
-
-    marking_period_payload = {
-        "label": marking_period,
-        "percentage": student_data.get("percentage"),
-        "calculatedMark": student_data.get("calculatedMark"),
-        "assignments": assignments,
-        "isAssignmentWeightingOn": raw.get("isAssignmentWeightingOn", False),
-        "assignmentCategories": _transform_categories(raw),
-    }
-
-    return {
-        "markingPeriod": marking_period_payload,
-        "synergyClassIdUsed": used_cls["ID"] if used_cls else synergy_class_ids[0],
-        "fetchMode": "detail",
-    }
-
-
-def scrape(username: str, password: str, *, fetch_mode: str = "full") -> dict:
-    """
-    Full pipeline: login → gradebook config → all Regular marking periods → per-class grades.
-    Returns a dict with 'student', 'gradingPeriods', and 'classes' keys.
-    Each class has a 'markingPeriods' list with per-period assignment data.
-    Raises LoginError, StudentVueError, or ParseError on failure.
-    """
-    session = login(username, password)
-    focus_data = get_gradebook_config(session)
-    student_gu = focus_data.get("_studentGU", "0")
-
-    schools = focus_data.get("Schools", [])
-    if not schools:
-        raise ParseError("No schools in GBFocusData")
-
-    school = schools[0]
-    all_periods = school.get("GradingPeriods", [])
-
-    # Fetch Regular marking periods only (skip Semester Term summary periods)
-    regular_periods = [gp for gp in all_periods if gp.get("GroupName") == "Regular"]
-    if not regular_periods:
-        regular_periods = all_periods
-
-    if fetch_mode == "cards_only":
-        return scrape_cards_only(username, password)
-
-    cfg = _load_course_merge_config()
-    merge_groups: tuple[frozenset[str], ...] = cfg["mergeNameGroups"]
-    semester_groups: list[list[str]] = cfg["semesterGroups"]
-
-    if fetch_mode == "current_period_only":
-        default_gp = next((gp for gp in regular_periods if gp.get("defaultFocus")), regular_periods[-1])
-        regular_periods = [default_gp]
-
-    # Fetch per-period data; collect results keyed by classId
-    # Structure: {classId: {periodName: raw_data}}
-    class_period_data: dict[int, dict[str, dict]] = {}
-    class_meta: dict[int, dict] = {}  # ID → {Name, TeacherName}
-    student_name = None
-    period_names = []
-
-    for gp in regular_periods:
-        period_name = gp["Name"]
-        period_names.append(period_name)
-        try:
-            classes_for_period, raw_list = _fetch_period_classes(session, focus_data, gp, student_gu)
-        except Exception:
-            continue  # skip failed periods entirely
-
-        for cls, raw in zip(classes_for_period, raw_list):
-            cid = cls["ID"]
-            class_meta[cid] = cls
-            if cid not in class_period_data:
-                class_period_data[cid] = {}
-            class_period_data[cid][period_name] = raw
-
-            # Short, safe dump of raw data for debugging (first class that has data)
-            import os, json
-            if not os.path.exists("debug_raw.json") and raw:
-                with open("debug_raw.json", "w", encoding="utf-8") as f:
-                    f.write(json.dumps(raw, indent=2)[:5000])
-                print("Initial sync preview saved to debug_raw.json")
-
-            if student_name is None and raw:
-                students = raw.get("students", [])
-                if students:
-                    student_name = students[0].get("name")
-
-    merged_period_data, merged_class_meta, merged_sources = _merge_semester_split_rows(
-        class_period_data, class_meta, period_names, merge_groups
-    )
-
-    # Build final classes list
-    all_class_data = []
-    for public_id, periods in merged_period_data.items():
-        meta = merged_class_meta.get(public_id, {})
-        marking_periods = []
-
-        period_id_sets: dict[str, set[str]] = {}
-        for pname in period_names:
-            raw = periods.get(pname)
-            if raw:
-                # Map metadata by assignmentID for quick lookup
-                meta_map = {
-                    str(m.get("assignmentID", m.get("AssignmentID", ""))): m
-                    for m in (raw.get("Assignments") or [])
-                }
-
-                # Merge metadata into score records before transforming
-                assignments = []
-                for a in raw.get("assignments", []):
-                    if not a.get("isForGrading", True) or a.get("hideInPortal", False):
-                        continue
-                    aid = str(a.get("assignmentID", a.get("AssignmentID", "")))
-                    if aid in meta_map:
-                        # Merge metadata into score object
-                        a = {**a, **meta_map[aid]}
-                    assignments.append(_transform_assignment(a, raw.get("_titleMap")))
-
-                id_set = {a["id"] for a in assignments if a["id"]}
-                period_id_sets[pname] = id_set
-                students = raw.get("students", [])
-                student_data = students[0] if students else {}
-                marking_periods.append({
-                    "label": pname,
-                    "percentage": student_data.get("percentage"),
-                    "calculatedMark": student_data.get("calculatedMark"),
-                    "assignments": assignments,
-                    "isAssignmentWeightingOn": raw.get("isAssignmentWeightingOn", False),
-                    "assignmentCategories": _transform_categories(raw),
-                    "assignmentsLoaded": True,
-                })
-            else:
-                marking_periods.append({
-                    "label": pname,
-                    "percentage": None,
-                    "calculatedMark": None,
-                    "assignments": [],
-                    "isAssignmentWeightingOn": False,
-                    "assignmentCategories": [],
-                    "assignmentsLoaded": True,
-                })
-
-        grading_type = "cumulative" if _detect_cumulative(period_id_sets) else "noncumulative"
-
-        # Determine current period (defaultFocus) and overall grade
-        default_period = next(
-            (gp for gp in regular_periods if gp.get("defaultFocus")), regular_periods[-1]
-        )
-        current_mp = periods.get(default_period["Name"])
-        current_students = (current_mp or {}).get("students", [])
-        current_student = current_students[0] if current_students else {}
-        current_mp_marking = next(
-            (mp for mp in marking_periods if mp["label"] == default_period["Name"]),
-            marking_periods[-1] if marking_periods else {},
-        )
-
-        src_cids = merged_sources.get(public_id, [])
-        if not src_cids and public_id.isdigit():
-            src_cids = [int(public_id)]
-        combined = _combined_display_name(src_cids, class_meta)
-        display_name = combined if combined else _clean_class_name(meta.get("Name", ""))
-
-        row = {
-            "id": public_id,
-            "name": display_name,
-            "teacherName": meta.get("TeacherName", ""),
-            "gradingType": grading_type,
-            "percentage": current_student.get("percentage"),
-            "calculatedMark": current_student.get("calculatedMark"),
-            "currentPeriod": default_period["Name"],
-            "markingPeriods": marking_periods,
-            "isAssignmentWeightingOn": current_mp_marking.get("isAssignmentWeightingOn", False),
-            "assignmentCategories": current_mp_marking.get("assignmentCategories", []),
-            # Convenience: current period assignments at top level for frontend compat
-            "assignments": next(
-                (mp["assignments"] for mp in marking_periods if mp["label"] == default_period["Name"]),
-                [],
-            ),
-            "assignmentsLoaded": True,
+        payload = {
+            "request": {
+                "gradingPeriodGU": gp.get("GU"),
+                "AGU": "0",
+                "orgYearGU": gp.get("OrgYearGU"),
+                "schoolID": school.get("SchoolID"),
+                "markPeriodGU": mark_period_gu,
+            }
         }
-        src = merged_sources.get(public_id, [])
-        if len(src) > 1:
-            row["mergedFromIds"] = [str(x) for x in src]
-        all_class_data.append(row)
+        r = await client.post(
+            f"{BASE_URL}/service/PXP2Communication.asmx/GradebookFocusClassInfo",
+            content=json.dumps(payload),
+            headers={
+                **JSON_HEADERS,
+                "AGU": "0",
+                "Referer": f"{BASE_URL}/PXP2_Gradebook.aspx",
+            },
+            timeout=30,
+        )
+        r.raise_for_status()
+        d = r.json().get("d", {})
+        focus_key = d.get("FOCUS_KEY", "")
+        classes = d.get("Data", {}).get("Classes", [])
 
-    all_class_data.sort(key=lambda c: (c.get("name") or "").lower())
+        raw: dict | None = None
+        used_cls: dict | None = None
+        last_err = None
+        for cid in synergy_class_ids:
+            cls = next((c for c in classes if c["ID"] == cid), None)
+            if not cls: continue
+            try:
+                title_map = await async_load_class_control(client, focus_info, cls, student_gu, focus_key)
+                raw = await async_get_class_grades(client, focus_key)
+                raw["_titleMap"] = title_map
+                used_cls = cls
+                break
+            except Exception as e:
+                last_err = e
 
-    out = {
-        "student": {"name": student_name},
-        "periods": period_names,
-        "classes": all_class_data,
-        "semesterGroups": semester_groups,
-        "fetchMode": fetch_mode,
-    }
+        if raw is None:
+            raise StudentVueError(f"Could not load class detail: {last_err}")
 
-    # Save full dump of all transformed assignments for external verification
-    debug_list = []
-    for cls_row in all_class_data:
-        for p in cls_row.get("markingPeriods", []):
-            for a in p.get("assignments", []):
-                debug_list.append({
-                    "class": cls_row["name"],
-                    "period": p["label"],
-                    "title": a["title"],
-                    "category": a["category"],
-                    "earned": a["pointsEarned"],
-                    "total": a["pointsTotal"],
-                    "excused": a["excused"],
-                    "raw_id": a["id"],
-                    "raw_debug": a.get("debugFields")
-                })
-    with open("debug_assignments.json", "w", encoding="utf-8") as f:
-        json.dump(debug_list, f, indent=2)
+        meta_map = {str(m.get("assignmentID", m.get("AssignmentID", ""))): m for m in (raw.get("Assignments") or [])}
+        assignments = []
+        for a in raw.get("assignments", []):
+            if not a.get("isForGrading", True) or a.get("hideInPortal", False): continue
+            aid = str(a.get("assignmentID", a.get("AssignmentID", "")))
+            if aid in meta_map: a = {**a, **meta_map[aid]}
+            assignments.append(_transform_assignment(a, raw.get("_titleMap")))
 
-    return out
+        students = raw.get("students", [])
+        student_data = students[0] if students else {}
+
+        marking_period_payload = {
+            "label": marking_period,
+            "percentage": student_data.get("percentage"),
+            "calculatedMark": student_data.get("calculatedMark"),
+            "assignments": assignments,
+            "isAssignmentWeightingOn": raw.get("isAssignmentWeightingOn", False),
+            "assignmentCategories": _transform_categories(raw),
+        }
+
+        return {
+            "markingPeriod": marking_period_payload,
+            "synergyClassIdUsed": used_cls["ID"] if used_cls else synergy_class_ids[0],
+            "fetchMode": "detail",
+        }
+
+
+async def scrape(username: str, password: str, *, fetch_mode: str = "full") -> dict:
+    """The optimized async entry point."""
+    if fetch_mode == "cards_only":
+        return await async_scrape_cards_only(username, password)
+
+    async with httpx.AsyncClient(timeout=30) as main_client:
+        await async_login(username, password, main_client)
+        focus_data = await async_get_gradebook_config(main_client)
+        student_gu = focus_data.get("_studentGU", "0")
+        schools = focus_data.get("Schools", [])
+        if not schools: raise ParseError("No schools in GBFocusData")
+        school = schools[0]
+        all_periods = school.get("GradingPeriods", [])
+        regular_periods = [gp for gp in all_periods if gp.get("GroupName") == "Regular"]
+        if not regular_periods: regular_periods = all_periods
+
+        if fetch_mode == "current_period_only":
+            default_gp = next((gp for gp in regular_periods if gp.get("defaultFocus")), regular_periods[-1])
+            regular_periods = [default_gp]
+
+        cfg = _load_course_merge_config()
+        merge_groups = cfg["mergeNameGroups"]
+        semester_groups = cfg["semesterGroups"]
+
+        # 1. Get class maps for each period using the main client
+        period_info = {}
+        for gp in regular_periods:
+            fake_school = {**school, "GradingPeriods": [gp]}
+            fake_focus = {**focus_data, "Schools": [fake_school]}
+            res = await async_get_class_list(main_client, fake_focus)
+            period_info[gp["Name"]] = res
+
+        # 2. Collect all work items: (period_name, class_obj, focus_info, focus_key)
+        work_items = []
+        for pname, info in period_info.items():
+            for cls in info["classes"]:
+                work_items.append((pname, cls, info["focus_info"], info["focus_key"]))
+
+        # 3. Process work items using a session pool
+        pool_size = min(len(work_items), 4)
+        pool = AsyncSessionPool(username, password, size=pool_size)
+        await pool.initialize()
+
+        class_period_data = {}
+        class_meta = {}
+        student_name = None
+
+        async def worker():
+            nonlocal student_name
+            while work_items:
+                try:
+                    pname, cls, focus_info, focus_key = work_items.pop()
+                except IndexError:
+                    break
+                
+                client = await pool.acquire()
+                try:
+                    title_map = await async_load_class_control(client, focus_info, cls, student_gu, focus_key)
+                    raw = await async_get_class_grades(client, focus_key)
+                    raw["_titleMap"] = title_map
+                    
+                    cid = cls["ID"]
+                    if cid not in class_period_data: class_period_data[cid] = {}
+                    class_period_data[cid][pname] = raw
+                    class_meta[cid] = cls
+
+                    if student_name is None and raw.get("students"):
+                        student_name = raw["students"][0].get("name")
+                except Exception:
+                    pass
+                finally:
+                    await pool.release(client)
+
+        await asyncio.gather(*(worker() for _ in range(pool_size)))
+        await pool.close()
+
+        period_names = [gp["Name"] for gp in regular_periods]
+        merged_period_data, merged_class_meta, merged_sources = _merge_semester_split_rows(
+            class_period_data, class_meta, period_names, merge_groups
+        )
+
+        all_class_data = []
+        for public_id, periods in merged_period_data.items():
+            meta = merged_class_meta.get(public_id, {})
+            marking_periods = []
+            period_id_sets = {}
+            for pname in period_names:
+                raw = periods.get(pname)
+                if raw:
+                    meta_map = {str(m.get("assignmentID", m.get("AssignmentID", ""))): m for m in (raw.get("Assignments") or [])}
+                    assignments = []
+                    for a in raw.get("assignments", []):
+                        if not a.get("isForGrading", True) or a.get("hideInPortal", False): continue
+                        aid = str(a.get("assignmentID", a.get("AssignmentID", "")))
+                        if aid in meta_map: a = {**a, **meta_map[aid]}
+                        assignments.append(_transform_assignment(a, raw.get("_titleMap")))
+                    
+                    period_id_sets[pname] = {a["id"] for a in assignments if a["id"]}
+                    student_data = raw.get("students", [{}])[0]
+                    marking_periods.append({
+                        "label": pname, "percentage": student_data.get("percentage"), "calculatedMark": student_data.get("calculatedMark"),
+                        "assignments": assignments, "isAssignmentWeightingOn": raw.get("isAssignmentWeightingOn", False),
+                        "assignmentCategories": _transform_categories(raw), "assignmentsLoaded": True,
+                    })
+                else:
+                    marking_periods.append({
+                        "label": pname, "percentage": None, "calculatedMark": None, "assignments": [],
+                        "isAssignmentWeightingOn": False, "assignmentCategories": [], "assignmentsLoaded": True,
+                    })
+
+            default_period = next((gp for gp in regular_periods if gp.get("defaultFocus")), regular_periods[-1])
+            current_mp_marking = next((mp for mp in marking_periods if mp["label"] == default_period["Name"]), marking_periods[-1])
+            curr_student = (periods.get(default_period["Name"]) or {}).get("students", [{}])[0]
+
+            src_cids = merged_sources.get(public_id, [])
+            combined = _combined_display_name(src_cids, class_meta)
+            
+            all_class_data.append({
+                "id": public_id, "name": combined or _clean_class_name(meta.get("Name", "")),
+                "teacherName": meta.get("TeacherName", ""),
+                "gradingType": "cumulative" if _detect_cumulative(period_id_sets) else "noncumulative",
+                "percentage": curr_student.get("percentage"), "calculatedMark": curr_student.get("calculatedMark"),
+                "currentPeriod": default_period["Name"], "markingPeriods": marking_periods,
+                "isAssignmentWeightingOn": current_mp_marking.get("isAssignmentWeightingOn", False),
+                "assignmentCategories": current_mp_marking.get("assignmentCategories", []),
+                "assignments": current_mp_marking["assignments"], "assignmentsLoaded": True,
+            })
+
+        all_class_data.sort(key=lambda c: c["name"].lower())
+        return {"student": {"name": student_name}, "periods": period_names, "classes": all_class_data, "semesterGroups": semester_groups, "fetchMode": fetch_mode}
+
+
+def scrape_class_detail(username: str, password: str, marking_period: str, synergy_class_ids: list[int]) -> dict:
+    """Sync wrapper for legacy calls (though we should update main.py)."""
+    return asyncio.run(async_scrape_class_detail(username, password, marking_period, synergy_class_ids))
+
+
+def scrape_sync(username: str, password: str, *, fetch_mode: str = "full") -> dict:
+    """Sync wrapper for legacy calls."""
+    return asyncio.run(scrape(username, password, fetch_mode=fetch_mode))

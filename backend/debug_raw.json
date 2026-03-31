@@ -1,8 +1,8 @@
 {
-  "classId": 18074,
-  "className": "(S1) Watkins, J  IB Ana & App HL2/AP Calc BC H(1) SEC:MA6431-2",
-  "gradingPeriodId": 304,
-  "GradingPeriodName": "MP1",
+  "classId": 20452,
+  "className": "(S2) Pickelmann, G  Economics and Personal Finance H(6) SEC:SS5440-5",
+  "gradingPeriodId": 308,
+  "GradingPeriodName": "MP3",
   "isPostWindowOpen": false,
   "isAssignmentWeightingOn": false,
   "applyRigorPoints": false,
@@ -12,7 +12,7 @@
   "markType": "Alpha",
   "percentageRoundingOn": true,
   "markRoundingOn": false,
-  "percentageRoundingPlaces": 2,
+  "percentageRoundingPlaces": 0,
   "markRoundingPlaces": 0,
   "standardsModeAssignmentScorePreference": "EnterTheAssignmentScore",
   "students": [
@@ -23,10 +23,10 @@
       "manualMark": "A",
       "lockScore": false,
       "calculatedMark": "A",
-      "percentage": 95.86,
+      "percentage": 98.0,
       "postedGrade": true,
       "postIsError": false,
-      "postMessage": "Posted A [94.80]"
+      "postMessage": "Posted A [98]"
     }
   ],
   "gradeBookScoreTypes": [
@@ -235,4 +235,4 @@
           "score": "D+",
           "value": 66.5,
           "lowScore": 67.0,
-          "highScore": 6
+          "highScore":
