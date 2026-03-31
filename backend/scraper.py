@@ -280,17 +280,95 @@ def get_class_list(session: requests.Session, focus_data: dict) -> dict:
     }
 
 
+def _parse_titles_from_html(html: str) -> dict[int, str]:
+    """
+    Parse assignment titles from LoadControl HTML response.
+
+    The HTML embeds a dxDataGrid config where each row object looks like:
+      {"gradeBookId":"353452", ..., "GBAssignment":"{...\"value\":\"January MML\"...}", ...}
+
+    GBAssignment is a doubly-encoded JSON string whose "value" key is the title.
+    Returns {gradeBookId: title}.
+    """
+    titles: dict[int, str] = {}
+    for gid_match in re.finditer(r'"gradeBookId":"(\d+)"', html):
+        try:
+            grade_book_id = int(gid_match.group(1))
+        except ValueError:
+            continue
+        # Search for GBAssignment within the next 3000 chars (same row object)
+        window = html[gid_match.start(): gid_match.start() + 3000]
+        gb_match = re.search(r'"GBAssignment":"((?:[^"\\]|\\.)*)"', window)
+        if not gb_match:
+            continue
+        try:
+            # First decode: un-escape the outer JSON string escaping
+            gb_str = json.loads('"' + gb_match.group(1) + '"')
+            # Second decode: the value is itself a JSON object
+            inner = json.loads(gb_str)
+            title = inner.get("value", "").strip()
+            if title:
+                titles[grade_book_id] = title
+        except (json.JSONDecodeError, ValueError):
+            continue
+    return titles
+
+
+def _load_class_control_raw_html(
+    session: requests.Session,
+    focus_info: dict,
+    cls: dict,
+    student_gu: str,
+    focus_key: str,
+) -> str:
+    """Like _load_class_control but returns raw HTML string for debugging."""
+    school = focus_info["school"]
+    gp = focus_info["grading_period"]
+
+    payload = {
+        "request": {
+            "control": "Gradebook_ClassDetails",
+            "parameters": {
+                "viewName": None,
+                "studentGU": student_gu,
+                "schoolID": school["SchoolID"],
+                "classID": cls["ID"],
+                "markPeriodGU": focus_info["mark_period_gu"],
+                "gradePeriodGU": gp["GU"],
+                "subjectID": -1,
+                "teacherID": -1,
+                "assignmentID": -1,
+                "standardIdentifier": None,
+                "AGU": "0",
+                "OrgYearGU": gp["OrgYearGU"],
+                "gradingPeriodGroup": None,
+            },
+        }
+    }
+
+    r = session.post(
+        f"{BASE_URL}/service/PXP2Communication.asmx/LoadControl",
+        json=payload,
+        headers={**JSON_HEADERS, "AGU": "0", "FOCUS_KEY": focus_key},
+        timeout=15,
+    )
+    r.raise_for_status()
+    return r.json().get("d", {}).get("Data", {}).get("html", "")
+
+
 def _load_class_control(
     session: requests.Session,
     focus_info: dict,
     cls: dict,
     student_gu: str,
     focus_key: str,
-) -> None:
+) -> dict[int, str]:
     """
     Replicates the browser's GB.LoadControl click handler — POSTs to LoadControl
     with the full FocusArgs (including classID) to set the server-side focus.
     After this call, GetClassData with Parameters '{}' returns that class's data.
+    Also parses assignment titles from the HTML response.
+    Returns {gradeBookId: title} map (may be empty if HTML has no assignments).
     """
     school = focus_info["school"]
     gp = focus_info["grading_period"]
@@ -323,6 +401,12 @@ def _load_class_control(
         timeout=15,
     )
     r.raise_for_status()
+
+    try:
+        html = r.json().get("d", {}).get("Data", {}).get("html", "")
+        return _parse_titles_from_html(html)
+    except Exception:
+        return {}
 
 
 def get_class_grades(session: requests.Session, focus_key: str) -> dict:
@@ -357,7 +441,7 @@ def get_class_grades(session: requests.Session, focus_key: str) -> dict:
     return r.json()
 
 
-def _transform_assignment(a: dict) -> dict:
+def _transform_assignment(a: dict, title_map: dict[int, str] | None = None) -> dict:
     """Transform a raw StudentVue assignment into the frontend Assignment shape."""
     score_str = a.get("score", "")
     points_possible = float(a.get("pointsPossible", 0) or 0)
@@ -379,9 +463,17 @@ def _transform_assignment(a: dict) -> dict:
     # Extra credit: x/0 — points go to earned only (no denominator)
     is_extra_credit = points_possible <= 0 and points_earned > 0
 
-    # Build a readable title from available fields
-    # Prefer "measure" or "assignmentName" or "assignment" or "assignmentTitle"
-    title = a.get("Measure") or a.get("assignmentName") or a.get("assignment") or a.get("assignmentTitle") or a.get("category") or a.get("unit") or "Assignment"
+    # Build a readable title: prefer HTML-parsed title (by gradeBookId), then JSON fields, then category
+    grade_book_id = a.get("gradeBookId")
+    title = (
+        (title_map.get(grade_book_id) if title_map and grade_book_id else None)
+        or a.get("Measure")
+        or a.get("assignmentName")
+        or a.get("assignmentTitle")
+        or a.get("category")
+        or a.get("unit")
+        or "Assignment"
+    )
     category = a.get("category") or a.get("unit") or "Assignment"
     due_date = a.get("dueDate", "")
 
@@ -404,8 +496,9 @@ def _transform_class(raw: dict) -> dict:
     students = raw.get("students", [])
     student = students[0] if students else {}
 
+    title_map = raw.get("_titleMap")
     assignments = [
-        _transform_assignment(a)
+        _transform_assignment(a, title_map)
         for a in raw.get("assignments", [])
         if a.get("isForGrading", True) and not a.get("hideInPortal", False)
     ]
@@ -633,8 +726,10 @@ def _fetch_period_classes(
     raw_list = []
     for cls in classes:
         try:
-            _load_class_control(session, focus_info, cls, student_gu, focus_key)
-            raw_list.append(get_class_grades(session, focus_key))
+            title_map = _load_class_control(session, focus_info, cls, student_gu, focus_key)
+            raw = get_class_grades(session, focus_key)
+            raw["_titleMap"] = title_map  # attach so _transform_assignment can use it
+            raw_list.append(raw)
         except Exception:
             raw_list.append(None)
 
@@ -700,7 +795,7 @@ def scrape_cards_only(username: str, password: str) -> dict:
             raw = periods.get(pname) if pname == default_name else None
             if raw:
                 assignments = [
-                    _transform_assignment(a)
+                    _transform_assignment(a, raw.get("_titleMap"))
                     for a in raw.get("assignments", [])
                     if a.get("isForGrading", True) and not a.get("hideInPortal", False)
                 ]
@@ -825,8 +920,9 @@ def scrape_class_detail(
         if not cls:
             continue
         try:
-            _load_class_control(session, focus_info, cls, student_gu, focus_key)
+            title_map = _load_class_control(session, focus_info, cls, student_gu, focus_key)
             raw = get_class_grades(session, focus_key)
+            raw["_titleMap"] = title_map
             used_cls = cls
             break
         except Exception as e:
@@ -856,7 +952,7 @@ def scrape_class_detail(
         if aid in meta_map:
             # Merge: metadata into score object
             a = {**a, **meta_map[aid]}
-        assignments.append(_transform_assignment(a))
+        assignments.append(_transform_assignment(a, raw.get("_titleMap")))
 
     students = raw.get("students", [])
     student_data = students[0] if students else {}
@@ -974,7 +1070,7 @@ def scrape(username: str, password: str, *, fetch_mode: str = "full") -> dict:
                     if aid in meta_map:
                         # Merge metadata into score object
                         a = {**a, **meta_map[aid]}
-                    assignments.append(_transform_assignment(a))
+                    assignments.append(_transform_assignment(a, raw.get("_titleMap")))
 
                 id_set = {a["id"] for a in assignments if a["id"]}
                 period_id_sets[pname] = id_set
