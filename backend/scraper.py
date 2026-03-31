@@ -361,21 +361,29 @@ def _transform_assignment(a: dict) -> dict:
     """Transform a raw StudentVue assignment into the frontend Assignment shape."""
     score_str = a.get("score", "")
     points_possible = float(a.get("pointsPossible", 0) or 0)
+    excused = a.get("excused", False)
 
     # Convert score to float (numeric scores only; skip letter/non-numeric)
     try:
         points_earned = float(score_str)
     except (ValueError, TypeError):
-        # Non-numeric score (e.g. letter grade, "I", "C") — skip or zero
+        # Non-numeric score (e.g. letter grade, "I", "C", "N/A", or empty)
         points_earned = 0.0
+        # If score is not a number, and isn't a known grade code that should count, excuse it.
+        # StudentVue handles "N/A", "Not Graded", etc. as non-grading statuses.
+        # Empty scores or "*" (placeholder) also shouldn't count as 0/Possible.
+        s = str(score_str).strip().upper()
+        if not s or s in ("N/A", "NOT GRADED", "NOT APPLICABLE", "*", "NE", "NOT ENTERED"):
+            excused = True
 
     # Extra credit: x/0 — points go to earned only (no denominator)
     is_extra_credit = points_possible <= 0 and points_earned > 0
 
     # Build a readable title from available fields
+    # Prefer "measure" or "assignmentName" or "assignment" or "assignmentTitle"
+    title = a.get("Measure") or a.get("assignmentName") or a.get("assignment") or a.get("assignmentTitle") or a.get("category") or a.get("unit") or "Assignment"
     category = a.get("category") or a.get("unit") or "Assignment"
     due_date = a.get("dueDate", "")
-    title = f"{category} — {due_date}" if due_date else category
 
     return {
         "id": str(a.get("resultID", "")),
@@ -384,9 +392,10 @@ def _transform_assignment(a: dict) -> dict:
         "pointsTotal": points_possible,
         "category": category,
         "dueDate": due_date,
-        "excused": a.get("excused", False),
+        "excused": excused,
         "isForGrading": a.get("isForGrading", True),
         "isExtraCredit": is_extra_credit,
+        "debugFields": a,
     }
 
 
@@ -826,11 +835,29 @@ def scrape_class_detail(
     if raw is None:
         raise StudentVueError(f"Could not load class detail: {last_err}")
 
-    assignments = [
-        _transform_assignment(a)
-        for a in raw.get("assignments", [])
-        if a.get("isForGrading", True) and not a.get("hideInPortal", False)
-    ]
+    # Short, safe dump of raw data for debugging
+    import json
+    with open("debug_raw.json", "w", encoding="utf-8") as f:
+        f.write(json.dumps(raw, indent=2)[:5000])
+    print("Preview saved to debug_raw.json")
+
+    # Map metadata by assignmentID for quick lookup
+    meta_map = {
+        str(m.get("assignmentID", m.get("AssignmentID", ""))): m
+        for m in (raw.get("Assignments") or [])
+    }
+
+    # Merge metadata into score records before transforming
+    assignments = []
+    for a in raw.get("assignments", []):
+        if not a.get("isForGrading", True) or a.get("hideInPortal", False):
+            continue
+        aid = str(a.get("assignmentID", a.get("AssignmentID", "")))
+        if aid in meta_map:
+            # Merge: metadata into score object
+            a = {**a, **meta_map[aid]}
+        assignments.append(_transform_assignment(a))
+
     students = raw.get("students", [])
     student_data = students[0] if students else {}
 
@@ -906,6 +933,13 @@ def scrape(username: str, password: str, *, fetch_mode: str = "full") -> dict:
                 class_period_data[cid] = {}
             class_period_data[cid][period_name] = raw
 
+            # Short, safe dump of raw data for debugging (first class that has data)
+            import os, json
+            if not os.path.exists("debug_raw.json") and raw:
+                with open("debug_raw.json", "w", encoding="utf-8") as f:
+                    f.write(json.dumps(raw, indent=2)[:5000])
+                print("Initial sync preview saved to debug_raw.json")
+
             if student_name is None and raw:
                 students = raw.get("students", [])
                 if students:
@@ -925,11 +959,23 @@ def scrape(username: str, password: str, *, fetch_mode: str = "full") -> dict:
         for pname in period_names:
             raw = periods.get(pname)
             if raw:
-                assignments = [
-                    _transform_assignment(a)
-                    for a in raw.get("assignments", [])
-                    if a.get("isForGrading", True) and not a.get("hideInPortal", False)
-                ]
+                # Map metadata by assignmentID for quick lookup
+                meta_map = {
+                    str(m.get("assignmentID", m.get("AssignmentID", ""))): m
+                    for m in (raw.get("Assignments") or [])
+                }
+
+                # Merge metadata into score records before transforming
+                assignments = []
+                for a in raw.get("assignments", []):
+                    if not a.get("isForGrading", True) or a.get("hideInPortal", False):
+                        continue
+                    aid = str(a.get("assignmentID", a.get("AssignmentID", "")))
+                    if aid in meta_map:
+                        # Merge metadata into score object
+                        a = {**a, **meta_map[aid]}
+                    assignments.append(_transform_assignment(a))
+
                 id_set = {a["id"] for a in assignments if a["id"]}
                 period_id_sets[pname] = id_set
                 students = raw.get("students", [])
@@ -941,6 +987,7 @@ def scrape(username: str, password: str, *, fetch_mode: str = "full") -> dict:
                     "assignments": assignments,
                     "isAssignmentWeightingOn": raw.get("isAssignmentWeightingOn", False),
                     "assignmentCategories": _transform_categories(raw),
+                    "assignmentsLoaded": True,
                 })
             else:
                 marking_periods.append({
@@ -950,6 +997,7 @@ def scrape(username: str, password: str, *, fetch_mode: str = "full") -> dict:
                     "assignments": [],
                     "isAssignmentWeightingOn": False,
                     "assignmentCategories": [],
+                    "assignmentsLoaded": True,
                 })
 
         grading_type = "cumulative" if _detect_cumulative(period_id_sets) else "noncumulative"
@@ -1004,4 +1052,24 @@ def scrape(username: str, password: str, *, fetch_mode: str = "full") -> dict:
         "semesterGroups": semester_groups,
         "fetchMode": fetch_mode,
     }
+
+    # Save full dump of all transformed assignments for external verification
+    debug_list = []
+    for cls_row in all_class_data:
+        for p in cls_row.get("markingPeriods", []):
+            for a in p.get("assignments", []):
+                debug_list.append({
+                    "class": cls_row["name"],
+                    "period": p["label"],
+                    "title": a["title"],
+                    "category": a["category"],
+                    "earned": a["pointsEarned"],
+                    "total": a["pointsTotal"],
+                    "excused": a["excused"],
+                    "raw_id": a["id"],
+                    "raw_debug": a.get("debugFields")
+                })
+    with open("debug_assignments.json", "w", encoding="utf-8") as f:
+        json.dump(debug_list, f, indent=2)
+
     return out

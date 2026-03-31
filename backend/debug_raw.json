@@ -1,0 +1,238 @@
+{
+  "classId": 18074,
+  "className": "(S1) Watkins, J  IB Ana & App HL2/AP Calc BC H(1) SEC:MA6431-2",
+  "gradingPeriodId": 304,
+  "GradingPeriodName": "MP1",
+  "isPostWindowOpen": false,
+  "isAssignmentWeightingOn": false,
+  "applyRigorPoints": false,
+  "rigorPoints": 0.0,
+  "useTeachersOverriddenMarkValueInTermWeighting": false,
+  "limitScoresToMaxValue": false,
+  "markType": "Alpha",
+  "percentageRoundingOn": true,
+  "markRoundingOn": false,
+  "percentageRoundingPlaces": 2,
+  "markRoundingPlaces": 0,
+  "standardsModeAssignmentScorePreference": "EnterTheAssignmentScore",
+  "students": [
+    {
+      "id": 7384,
+      "name": "Raymond Chai",
+      "img": "Photos/80/809b951c-2ccd-4791-bcce-b9411eb37b08_Photo.PNG",
+      "manualMark": "A",
+      "lockScore": false,
+      "calculatedMark": "A",
+      "percentage": 95.86,
+      "postedGrade": true,
+      "postIsError": false,
+      "postMessage": "Posted A [94.80]"
+    }
+  ],
+  "gradeBookScoreTypes": [
+    {
+      "id": 1,
+      "name": "Percentage",
+      "max": 100.0,
+      "details": [],
+      "min": 0.0
+    },
+    {
+      "id": 2,
+      "name": "Raw Score",
+      "max": 100.0,
+      "details": [],
+      "min": 0.0
+    },
+    {
+      "id": 3,
+      "name": "Letter Grade",
+      "max": 100.0,
+      "details": [
+        {
+          "score": "A",
+          "value": 100.0
+        },
+        {
+          "score": "B",
+          "value": 85.0
+        },
+        {
+          "score": "C",
+          "value": 75.0
+        },
+        {
+          "score": "D",
+          "value": 65.0
+        },
+        {
+          "score": "F",
+          "value": 55.0
+        }
+      ],
+      "min": 55.0
+    },
+    {
+      "id": 4,
+      "name": "Rubric 4-1",
+      "max": 4.0,
+      "details": [
+        {
+          "score": "4",
+          "value": 4.0
+        },
+        {
+          "score": "3",
+          "value": 3.0
+        },
+        {
+          "score": "2",
+          "value": 2.0
+        },
+        {
+          "score": "1",
+          "value": 1.0
+        }
+      ],
+      "min": 1.0
+    },
+    {
+      "id": 6,
+      "name": "Rubric 4-1 NMS",
+      "max": 4.0,
+      "details": [
+        {
+          "score": "4",
+          "value": 4.0
+        },
+        {
+          "score": "3.5",
+          "value": 3.5
+        },
+        {
+          "score": "3",
+          "value": 3.0
+        },
+        {
+          "score": "2.5",
+          "value": 2.5
+        },
+        {
+          "score": "2",
+          "value": 2.0
+        },
+        {
+          "score": "1.5",
+          "value": 1.5
+        },
+        {
+          "score": "1",
+          "value": 1.0
+        },
+        {
+          "score": ".5",
+          "value": 0.5
+        },
+        {
+          "score": "I",
+          "value": -1.0
+        },
+        {
+          "score": "C",
+          "value": -2.0
+        }
+      ],
+      "min": -2.0
+    },
+    {
+      "id": 7,
+      "name": "NMS Rubric Incomplete/Complete *deleted",
+      "max": 1.0,
+      "details": [
+        {
+          "score": "I",
+          "value": 0.0
+        },
+        {
+          "score": "C",
+          "value": 1.0
+        }
+      ],
+      "min": 0.0
+    }
+  ],
+  "reportCardScoreTypes": [
+    {
+      "id": 3,
+      "name": "GenesisProgressPeriod",
+      "max": 100.0,
+      "details": [
+        {
+          "score": "A",
+          "value": 92.5,
+          "lowScore": 93.0,
+          "highScore": 100.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "A-",
+          "value": 89.5,
+          "lowScore": 90.0,
+          "highScore": 92.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "B+",
+          "value": 86.5,
+          "lowScore": 87.0,
+          "highScore": 89.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "B",
+          "value": 82.5,
+          "lowScore": 83.0,
+          "highScore": 86.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "B-",
+          "value": 79.5,
+          "lowScore": 80.0,
+          "highScore": 82.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "C+",
+          "value": 76.5,
+          "lowScore": 77.0,
+          "highScore": 79.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "C",
+          "value": 72.5,
+          "lowScore": 73.0,
+          "highScore": 76.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "C-",
+          "value": 69.5,
+          "lowScore": 70.0,
+          "highScore": 72.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "D+",
+          "value": 66.5,
+          "lowScore": 67.0,
+          "highScore": 6
