@@ -7,6 +7,7 @@ This script tries multiple User-Agent strings to find what gets through.
 
 import requests
 import sys
+import xml.sax.saxutils as saxutils
 
 BASE_HOST = "mi-mps.edupoint.com"
 SOAP_ENDPOINT = f"https://{BASE_HOST}/Service/PXPCommunication.asmx"
@@ -15,12 +16,12 @@ SOAP_ENDPOINT = f"https://{BASE_HOST}/Service/PXPCommunication.asmx"
 USER_AGENTS = [
     # 1. New StudentVUE app (iOS) — high version number
     ("New iOS App v20.0",      "StudentVUE/20.0.0 CFNetwork/1568.200.51 Darwin/24.1.0"),
-    # 2. New StudentVUE app (iOS) — slightly different format  
-    ("New iOS App v15.0",      "StudentVUE/15.0.0 CFNetwork/1485 Darwin/23.1.0"),
+    # 2. Latest known iOS version
+    ("Latest iOS App v11.3.1", "StudentVUE/11.3.1 CFNetwork/1404.0.5 Darwin/22.3.0"),
     # 3. New StudentVUE app (Android)
-    ("New Android App v20.0",  "StudentVUE/20.0.0 (Linux; Android 14)"),
+    ("New Android App v11.1.0", "StudentVUE/11.1.0 (Linux; Android 14)"),
     # 4. Try the Synergy 2026 era version
-    ("Synergy 2026 style",     "StudentVUE/2026.0.0 CFNetwork/1568.200.51 Darwin/24.1.0"),
+    ("Android App v11.1.0 (Pixel)", "StudentVUE/11.1.0 (Linux; Android 14; Pixel 7)"),
     # 5. Generic mobile browser (maybe no UA check for non-app agents?)
     ("Generic Chrome Mobile",  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"),
     # 6. Plain python requests default  
@@ -33,14 +34,16 @@ USER_AGENTS = [
 
 
 def build_soap_envelope(user_id, password, method_name, param_str):
+    u = saxutils.escape(user_id)
+    p = saxutils.escape(password)
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                xmlns:xsd="http://www.w3.org/2001/XMLSchema"
                xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
     <ProcessWebServiceRequest xmlns="http://edupoint.com/webservices/">
-      <userID>{user_id}</userID>
-      <password>{password}</password>
+      <userID>{u}</userID>
+      <password>{p}</password>
       <skipLoginLog>1</skipLoginLog>
       <parent>0</parent>
       <webServiceHandleName>PXPWebServices</webServiceHandleName>
