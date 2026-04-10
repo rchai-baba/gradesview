@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+@layer base {
+  :root {
+    --background: 40 20% 97%;
+    --foreground: 220 20% 12%;
+
+    --card: 40 15% 99%;
+    --card-foreground: 220 20% 12%;
+
+    --popover: 40 15% 99%;
+    --popover-foreground: 220 20% 12%;
+
+    --primary: 220 18% 20%;
+    --primary-foreground: 40 20% 97%;
+
+    --secondary: 40 12% 93%;
+    --secondary-foreground: 220 18% 20%;
+
+    --muted: 40 10% 94%;
+    --muted-foreground: 220 10% 46%;
+
+    --accent: 40 12% 90%;
+    --accent-foreground: 220 18% 20%;
+
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 40 12% 88%;
+    --input: 40 12% 88%;
+    --ring: 220 18% 20%;
+
+    --radius: 0.75rem;
+
+    /* Custom tokens */
+    --grade-a: 145 35% 42%;
+    --grade-b: 145 25% 50%;
+    --grade-c: 45 55% 52%;
+    --grade-d: 25 55% 52%;
+    --grade-f: 0 55% 52%;
+
+    --totals-bg: 210 40% 94%;
+    --totals-border: 210 35% 85%;
+    --totals-foreground: 210 30% 25%;
+
+    --analysis-bg: 145 35% 93%;
+    --analysis-border: 145 30% 82%;
+    --analysis-foreground: 145 30% 22%;
+
+    --font-display: 'DM Serif Display', serif;
+    --font-body: 'DM Sans', sans-serif;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+  }
+}
