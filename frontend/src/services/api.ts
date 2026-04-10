@@ -1,7 +1,5 @@
 import type { ApiClass, ApiMarkingPeriod, ApiResponse } from "@/types";
 
-const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000";
-
 /** localStorage: cards_only | current_period_only | full */
 export const FETCH_MODE_STORAGE_KEY = "grades-fetch-mode";
 
@@ -51,7 +49,7 @@ export function clearSessionCredentials(): void {
 
 export async function loginAndFetchGrades(username: string, password: string): Promise<ApiResponse> {
   const fetch_mode = getLoginFetchMode();
-  const res = await fetch(`${API_URL}/api/login`, {
+  const res = await fetch("/api/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password, fetch_mode }),
@@ -79,7 +77,7 @@ export async function fetchClassDetail(params: {
   markingPeriod: string;
   synergyClassIds: number[];
 }): Promise<ClassDetailResponse> {
-  const res = await fetch(`${API_URL}/api/class-detail`, {
+  const res = await fetch("/api/class-detail", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
