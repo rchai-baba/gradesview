@@ -1,0 +1,1637 @@
+{
+  "classId": 20254,
+  "className": "(S2) Smallfield, J  AP Advanced Chemistry H (1 hr)(3) SEC:SC5422-1",
+  "gradingPeriodId": 309,
+  "GradingPeriodName": "MP4",
+  "isPostWindowOpen": false,
+  "isAssignmentWeightingOn": true,
+  "applyRigorPoints": false,
+  "rigorPoints": 0.0,
+  "useTeachersOverriddenMarkValueInTermWeighting": false,
+  "limitScoresToMaxValue": false,
+  "markType": "Alpha",
+  "percentageRoundingOn": true,
+  "markRoundingOn": false,
+  "percentageRoundingPlaces": 0,
+  "markRoundingPlaces": 0,
+  "standardsModeAssignmentScorePreference": "EnterTheAssignmentScore",
+  "students": [
+    {
+      "id": 7384,
+      "name": "Raymond Chai",
+      "img": "Photos/80/809b951c-2ccd-4791-bcce-b9411eb37b08_Photo.PNG",
+      "manualMark": "A",
+      "lockScore": false,
+      "calculatedMark": "A",
+      "percentage": 100.0,
+      "postedGrade": false,
+      "postIsError": false,
+      "postMessage": "Not Posted"
+    }
+  ],
+  "gradeBookScoreTypes": [
+    {
+      "id": 1,
+      "name": "Percentage",
+      "max": 100.0,
+      "details": [],
+      "min": 0.0
+    },
+    {
+      "id": 2,
+      "name": "Raw Score",
+      "max": 100.0,
+      "details": [],
+      "min": 0.0
+    },
+    {
+      "id": 3,
+      "name": "Letter Grade",
+      "max": 100.0,
+      "details": [
+        {
+          "score": "A",
+          "value": 100.0
+        },
+        {
+          "score": "B",
+          "value": 85.0
+        },
+        {
+          "score": "C",
+          "value": 75.0
+        },
+        {
+          "score": "D",
+          "value": 65.0
+        },
+        {
+          "score": "F",
+          "value": 55.0
+        }
+      ],
+      "min": 55.0
+    },
+    {
+      "id": 4,
+      "name": "Rubric 4-1",
+      "max": 4.0,
+      "details": [
+        {
+          "score": "4",
+          "value": 4.0
+        },
+        {
+          "score": "3",
+          "value": 3.0
+        },
+        {
+          "score": "2",
+          "value": 2.0
+        },
+        {
+          "score": "1",
+          "value": 1.0
+        }
+      ],
+      "min": 1.0
+    },
+    {
+      "id": 6,
+      "name": "Rubric 4-1 NMS",
+      "max": 4.0,
+      "details": [
+        {
+          "score": "4",
+          "value": 4.0
+        },
+        {
+          "score": "3.5",
+          "value": 3.5
+        },
+        {
+          "score": "3",
+          "value": 3.0
+        },
+        {
+          "score": "2.5",
+          "value": 2.5
+        },
+        {
+          "score": "2",
+          "value": 2.0
+        },
+        {
+          "score": "1.5",
+          "value": 1.5
+        },
+        {
+          "score": "1",
+          "value": 1.0
+        },
+        {
+          "score": ".5",
+          "value": 0.5
+        },
+        {
+          "score": "I",
+          "value": -1.0
+        },
+        {
+          "score": "C",
+          "value": -2.0
+        }
+      ],
+      "min": -2.0
+    },
+    {
+      "id": 7,
+      "name": "NMS Rubric Incomplete/Complete *deleted",
+      "max": 1.0,
+      "details": [
+        {
+          "score": "I",
+          "value": 0.0
+        },
+        {
+          "score": "C",
+          "value": 1.0
+        }
+      ],
+      "min": 0.0
+    }
+  ],
+  "reportCardScoreTypes": [
+    {
+      "id": 3,
+      "name": "GenesisProgressPeriod",
+      "max": 100.0,
+      "details": [
+        {
+          "score": "A",
+          "value": 92.5,
+          "lowScore": 93.0,
+          "highScore": 100.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "A-",
+          "value": 89.5,
+          "lowScore": 90.0,
+          "highScore": 92.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "B+",
+          "value": 86.5,
+          "lowScore": 87.0,
+          "highScore": 89.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "B",
+          "value": 82.5,
+          "lowScore": 83.0,
+          "highScore": 86.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "B-",
+          "value": 79.5,
+          "lowScore": 80.0,
+          "highScore": 82.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "C+",
+          "value": 76.5,
+          "lowScore": 77.0,
+          "highScore": 79.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "C",
+          "value": 72.5,
+          "lowScore": 73.0,
+          "highScore": 76.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "C-",
+          "value": 69.5,
+          "lowScore": 70.0,
+          "highScore": 72.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "D+",
+          "value": 66.5,
+          "lowScore": 67.0,
+          "highScore": 69.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "D",
+          "value": 62.5,
+          "lowScore": 63.0,
+          "highScore": 66.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "D-",
+          "value": 59.5,
+          "lowScore": 60.0,
+          "highScore": 62.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "E",
+          "value": 0.0,
+          "lowScore": 0.0,
+          "highScore": 59.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "G",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "F",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "P",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "U",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "S",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "I",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "NC",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "H",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "W",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "WP",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "CP",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "CF",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "WE",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "WF",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "GenesisGrading",
+      "max": 100.0,
+      "details": [
+        {
+          "score": "A",
+          "value": 92.5,
+          "lowScore": 93.0,
+          "highScore": 100.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "A-",
+          "value": 89.5,
+          "lowScore": 90.0,
+          "highScore": 92.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "B+",
+          "value": 86.5,
+          "lowScore": 87.0,
+          "highScore": 89.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "B",
+          "value": 82.5,
+          "lowScore": 83.0,
+          "highScore": 86.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "B-",
+          "value": 79.5,
+          "lowScore": 80.0,
+          "highScore": 82.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "C+",
+          "value": 76.5,
+          "lowScore": 77.0,
+          "highScore": 79.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "C",
+          "value": 72.5,
+          "lowScore": 73.0,
+          "highScore": 76.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "C-",
+          "value": 69.5,
+          "lowScore": 70.0,
+          "highScore": 72.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "D+",
+          "value": 66.5,
+          "lowScore": 67.0,
+          "highScore": 69.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "D",
+          "value": 62.5,
+          "lowScore": 63.0,
+          "highScore": 66.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "D-",
+          "value": 59.5,
+          "lowScore": 60.0,
+          "highScore": 62.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "E",
+          "value": 0.0,
+          "lowScore": 0.0,
+          "highScore": 59.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "G",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "F",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "P",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "U",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "S",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "I",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "NC",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "H",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "W",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "WP",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "CP",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "CF",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "WE",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "WF",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Academic Indicators",
+      "max": 100.0,
+      "details": [
+        {
+          "score": "EXT",
+          "value": 4.0,
+          "lowScore": 95.0,
+          "highScore": 100.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "ACH",
+          "value": 3.0,
+          "lowScore": 75.0,
+          "highScore": 94.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "DEV",
+          "value": 2.0,
+          "lowScore": 65.0,
+          "highScore": 74.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "LIM",
+          "value": 1.0,
+          "lowScore": 0.0,
+          "highScore": 64.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Learner Expectations Don't Use",
+      "max": 100.0,
+      "details": [
+        {
+          "score": "EXT",
+          "value": 4.0,
+          "lowScore": 95.0,
+          "highScore": 100.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "ACH",
+          "value": 3.0,
+          "lowScore": 75.0,
+          "highScore": 94.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "DEV",
+          "value": 2.0,
+          "lowScore": 65.0,
+          "highScore": 74.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "LIM",
+          "value": 1.0,
+          "lowScore": 0.0,
+          "highScore": 64.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "IP",
+          "value": 1.0,
+          "lowScore": -2.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "NA",
+          "value": 0.0,
+          "lowScore": -1.0,
+          "highScore": -1.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "NMS Rubric 4-1 *deleted",
+      "max": 100.0,
+      "details": [
+        {
+          "score": "A",
+          "value": 92.5,
+          "lowScore": 93.0,
+          "highScore": 100.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "A-",
+          "value": 89.5,
+          "lowScore": 90.0,
+          "highScore": 92.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "B+",
+          "value": 86.5,
+          "lowScore": 87.0,
+          "highScore": 89.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "B",
+          "value": 82.5,
+          "lowScore": 83.0,
+          "highScore": 86.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "B-",
+          "value": 79.5,
+          "lowScore": 80.0,
+          "highScore": 82.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "C+",
+          "value": 76.5,
+          "lowScore": 77.0,
+          "highScore": 79.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "C",
+          "value": 72.5,
+          "lowScore": 73.0,
+          "highScore": 76.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "C-",
+          "value": 69.5,
+          "lowScore": 70.0,
+          "highScore": 72.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "D+",
+          "value": 66.5,
+          "lowScore": 67.0,
+          "highScore": 69.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "D",
+          "value": 62.5,
+          "lowScore": 63.0,
+          "highScore": 66.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "D-",
+          "value": 59.5,
+          "lowScore": 60.0,
+          "highScore": 62.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "E",
+          "value": 0.0,
+          "lowScore": 0.0,
+          "highScore": 59.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "G",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "F",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "P",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "U",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "S",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "I",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "TO",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "NC",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "H",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "W",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "WP",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "WVR",
+          "value": -2.0,
+          "lowScore": -1.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "NMS Rubric 4-1 *deleted",
+      "max": 4.0,
+      "details": [
+        {
+          "score": "EXT",
+          "value": 4.0,
+          "lowScore": 4.0,
+          "highScore": 4.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "ACH",
+          "value": 3.0,
+          "lowScore": 3.0,
+          "highScore": 3.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "3.5",
+          "value": 3.5,
+          "lowScore": 3.01,
+          "highScore": 3.5,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "DEV",
+          "value": 2.0,
+          "lowScore": 2.0,
+          "highScore": 2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "LIM",
+          "value": 1.0,
+          "lowScore": 1.0,
+          "highScore": 1.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "2.0",
+          "value": 2.0,
+          "lowScore": 1.51,
+          "highScore": 2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "1.50",
+          "value": 1.5,
+          "lowScore": 1.01,
+          "highScore": 1.5,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "NMS Rubric 4-1",
+      "max": 10.0,
+      "details": [
+        {
+          "score": "4.0",
+          "value": 4.0,
+          "lowScore": 4.0,
+          "highScore": 4.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "3.5",
+          "value": 3.5,
+          "lowScore": 3.5,
+          "highScore": 3.5,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "3",
+          "value": 3.0,
+          "lowScore": 3.0,
+          "highScore": 3.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "2.5",
+          "value": 2.5,
+          "lowScore": 2.5,
+          "highScore": 2.5,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "2",
+          "value": 2.0,
+          "lowScore": 2.0,
+          "highScore": 2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "1.5",
+          "value": 1.5,
+          "lowScore": 1.5,
+          "highScore": 1.5,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "1",
+          "value": 1.0,
+          "lowScore": 1.0,
+          "highScore": 1.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": ".50",
+          "value": 0.5,
+          "lowScore": 0.5,
+          "highScore": 0.5,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "I",
+          "value": -100.0,
+          "lowScore": 0.0,
+          "highScore": 0.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "C",
+          "value": 10.0,
+          "lowScore": 10.0,
+          "highScore": 10.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "name": "PYP Score",
+      "max": 1.0,
+      "details": [
+        {
+          "score": "X",
+          "value": 1.0,
+          "lowScore": 1.0,
+          "highScore": 1.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "name": "DK Writing Level",
+      "max": 6.0,
+      "details": [
+        {
+          "score": "1",
+          "value": 1.0,
+          "lowScore": 1.0,
+          "highScore": 1.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "2",
+          "value": 2.0,
+          "lowScore": 2.0,
+          "highScore": 2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "3",
+          "value": 3.0,
+          "lowScore": 3.0,
+          "highScore": 3.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "4",
+          "value": 4.0,
+          "lowScore": 4.0,
+          "highScore": 4.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "5",
+          "value": 5.0,
+          "lowScore": 5.0,
+          "highScore": 5.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "6",
+          "value": 6.0,
+          "lowScore": 6.0,
+          "highScore": 6.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "name": "DK Story Retell",
+      "max": 5.0,
+      "details": [
+        {
+          "score": "1",
+          "value": 1.0,
+          "lowScore": 1.0,
+          "highScore": 1.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "2",
+          "value": 2.0,
+          "lowScore": 2.0,
+          "highScore": 2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "3",
+          "value": 3.0,
+          "lowScore": 3.0,
+          "highScore": 3.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "4",
+          "value": 4.0,
+          "lowScore": 4.0,
+          "highScore": 4.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "5",
+          "value": 5.0,
+          "lowScore": 5.0,
+          "highScore": 5.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "name": "Yes/No",
+      "max": 1.0,
+      "details": [
+        {
+          "score": "Yes",
+          "value": 1.0,
+          "lowScore": 1.0,
+          "highScore": 1.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "No",
+          "value": 0.0,
+          "lowScore": 0.0,
+          "highScore": 0.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "name": "Learner Expectations",
+      "max": 100.0,
+      "details": [
+        {
+          "score": "EXT",
+          "value": 4.0,
+          "lowScore": 95.0,
+          "highScore": 100.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "ACH",
+          "value": 3.0,
+          "lowScore": 75.0,
+          "highScore": 94.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "DEV",
+          "value": 2.0,
+          "lowScore": 65.0,
+          "highScore": 74.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "LIM",
+          "value": 1.0,
+          "lowScore": 0.0,
+          "highScore": 64.99,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "IP",
+          "value": 1.0,
+          "lowScore": -2.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "NA",
+          "value": 0.0,
+          "lowScore": -1.0,
+          "highScore": -1.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "name": "TSDL Scale",
+      "max": -1.0,
+      "details": [
+        {
+          "score": "CP",
+          "value": -2.0,
+          "lowScore": -2.0,
+          "highScore": -1.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "CF",
+          "value": -2.0,
+          "lowScore": -4.0,
+          "highScore": -3.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "name": "Progress Indicators",
+      "max": 4.0,
+      "details": [
+        {
+          "score": "EXT",
+          "value": 5.0,
+          "lowScore": 3.5,
+          "highScore": 4.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "ACH",
+          "value": 4.0,
+          "lowScore": 2.5,
+          "highScore": 3.49,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "DEV",
+          "value": 3.0,
+          "lowScore": 1.5,
+          "highScore": 2.49,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "LIM",
+          "value": 2.0,
+          "lowScore": 0.0,
+          "highScore": 1.49,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "NA",
+          "value": 1.0,
+          "lowScore": -1.0,
+          "highScore": -1.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "name": "Writing Level",
+      "max": -1.0,
+      "details": [
+        {
+          "score": "1",
+          "value": 6.0,
+          "lowScore": -1.0,
+          "highScore": -1.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "2",
+          "value": 5.0,
+          "lowScore": -2.0,
+          "highScore": -2.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "3",
+          "value": 4.0,
+          "lowScore": -3.0,
+          "highScore": -3.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "4",
+          "value": 3.0,
+          "lowScore": -4.0,
+          "highScore": -4.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "5",
+          "value": 2.0,
+          "lowScore": -5.0,
+          "highScore": -5.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        },
+        {
+          "score": "6",
+          "value": 1.0,
+          "lowScore": -6.0,
+          "highScore": -6.0,
+          "limitPCTMaxValue": 0.0,
+          "limitPCTCalcMethod": "MAX"
+        }
+      ]
+    }
+  ],
+  "measureTypes": [
+    {
+      "id": 1,
+      "name": "Homework Assignments",
+      "fgColor": "#404040",
+      "bgColor": "#BDCFDF",
+      "dropScores": 0,
+      "weight": 0.0
+    },
+    {
+      "id": 4,
+      "name": "In-Class Assignments",
+      "fgColor": "#fff",
+      "bgColor": "#5684AD",
+      "dropScores": 0,
+      "weight": 5.0
+    },
+    {
+      "id": 15,
+      "name": "Daily Assignments",
+      "fgColor": "#404040",
+      "bgColor": "#8BC6C9",
+      "dropScores": 0,
+      "weight": 0.0
+    },
+    {
+      "id": 16,
+      "name": "Class Participation",
+      "fgColor": "#404040",
+      "bgColor": "#8CC8A7",
+      "dropScores": 0,
+      "weight": 0.0
+    },
+    {
+      "id": 2,
+      "name": "Quizzes",
+      "fgColor": "#404040",
+      "bgColor": "#A9C88C",
+      "dropScores": 0,
+      "weight": 25.0
+    },
+    {
+      "id": 14,
+      "name": "Tests",
+      "fgColor": "#404040",
+      "bgColor": "#C8C78C",
+      "dropScores": 0,
+      "weight": 50.0
+    },
+    {
+      "id": 5,
+      "name": "Project",
+      "fgColor": "#404040",
+      "bgColor": "#C7968D",
+      "dropScores": 0,
+      "weight": 20.0
+    },
+    {
+      "id": 17,
+      "name": "Final Exam",
+      "fgColor": "#404040",
+      "bgColor": "#CC88AC",
+      "dropScores": 0,
+      "weight": 0.0
+    },
+    {
+      "id": 18,
+      "name": "Essay",
+      "fgColor": "#404040",
+      "bgColor": "#CE868B",
+      "dropScores": 0,
+      "weight": 0.0
+    },
+    {
+      "id": 19,
+      "name": "Student Assessment",
+      "fgColor": "#404040",
+      "bgColor": "#C0C0C0",
+      "dropScores": 0,
+      "weight": 0.0
+    }
+  ],
+  "assignments": [
+    {
+      "resultID": 7074766,
+      "studentId": 7384,
+      "measureTypeId": 2,
+      "gradeBookId": 378352,
+      "gradeBookScoreTypeId": 2,
+      "gradeBookCategoryId": 1,
+      "gradingPeriodId": 309,
+      "dropScoreText": "",
+      "publicNote": "",
+      "privateNote": "",
+      "hideInPortal": false,
+      "unit": "No Unit",
+      "category": "Quizzes",
+      "week": "3/29/2026 through 4/4/2026",
+      "pointsPossible": 5.0,
+      "score": "5",
+      "originalScore": "5",
+      "excused": false,
+      "maxValue": 5.0,
+      "maxScore": "5.0000",
+      "dueDate": "3/29/2026",
+      "isForGrading": true,
+      "isGradeBookMissingMark": false,
+      "analysisBandId": -1,
+      "reportCardScoreTypeId": 4,
+      "commentCode": null,
+      "penaltyPct": 0
+    }
+  ],
+  "standardsAssignments": [],
+  "standardsEvidence": [],
+  "measureTypeGrades": [
+    {
+      "studentId": 7384,
+      "measureTypeId": 2,
+      "measureTypeWeight": 25.0,
+      "assignmentCount": 1,
+      "points": 5.0,
+      "pointsPossible": 5.0,
+      "reportCardScoreTypeId": 4,
+      "calculatedMark": "A",
+      "incompleteAssignments": 0,
+      "maxValue": 100.0
+    }
+  ],
+  "classGrades": [
+    {
+      "studentId": 7384,
+      "assignmentCount": 1,
+      "points": 5.0,
+      "pointsPossible": 5.0,
+      "incompleteAssignments": 0.0,
+      "reportCardScoreTypeId": 4,
+      "maxValue": 100.0,
+      "gradingPeriodId": 309,
+      "lockScore": false,
+      "totalWeightedPercentage": 100.0,
+      "totalAssignmentWeight": 100.0,
+      "manualMark": "A",
+      "calculatedMark": "A"
+    }
+  ],
+  "termWeighting": [
+    {
+      "childPeriodId": 308,
+      "calculatedPeriodId": 311,
+      "weight": 45.0,
+      "classId": 20254,
+      "schoolYearId": 17
+    },
+    {
+      "childPeriodId": 309,
+      "calculatedPeriodId": 311,
+      "weight": 45.0,
+      "classId": 20254,
+      "schoolYearId": 17
+    },
+    {
+      "childPeriodId": 310,
+      "calculatedPeriodId": 311,
+      "weight": 10.0,
+      "classId": 20254,
+      "schoolYearId": 17
+    }
+  ],
+  "termWeightingClassGrades": [
+    {
+      "studentId": 7384,
+      "assignmentCount": 1,
+      "points": 5.0,
+      "pointsPossible": 5.0,
+      "incompleteAssignments": 0.0,
+      "reportCardScoreTypeId": 4,
+      "maxValue": 100.0,
+      "gradingPeriodId": 309,
+      "lockScore": false,
+      "totalWeightedPercentage": 100.0,
+      "totalAssignmentWeight": 100.0,
+      "manualMark": "A",
+      "calculatedMark": null
+    }
+  ],
+  "analysisBands": [
+    {
+      "id": 2,
+      "bandName": "Perf. Band 1",
+      "maxValue": 100.0,
+      "details": [
+        {
+          "id": 1,
+          "bgColor": "#f5f5f5",
+          "fgColor": "#404040",
+          "highScore": 100.0,
+          "lowScore": 75.0,
+          "mark": "High",
+          "rangeDisplayText": "High - 75.00 to 100.00"
+        },
+        {
+          "id": 6,
+          "bgColor": "#f5f5f5",
+          "fgColor": "#404040",
+          "highScore": 74.0,
+          "lowScore": 50.0,
+          "mark": "Medium",
+          "rangeDisplayText": "Medium - 50.00 to 74.00"
+        },
+        {
+          "id": 7,
+          "bgColor": "#f5f5f5",
+          "fgColor": "#404040",
+          "highScore": 49.0,
+          "lowScore": 0.0,
+          "mark": "Low",
+          "rangeDisplayText": "Low - 0.00 to 49.00"
+        }
+      ]
+    }
+  ],
+  "comments": [
+    {
+      "comment": "Late",
+      "commentID": 1,
+      "commentCode": "La",
+      "isGradeBookMissingMark": false,
+      "penaltyPct": null,
+      "removeWhenScored": false,
+      "assignmentValue": null,
+      "assignmentValueIsPercent": false,
+      "standardsValue": null,
+      "standardsValueIsPercent": false
+    },
+    {
+      "comment": "Absent",
+      "commentID": 2,
+      "commentCode": "Ab",
+      "isGradeBookMissingMark": true,
+      "penaltyPct": null,
+      "removeWhenScored": false,
+      "assignmentValue": "0.0000",
+      "assignmentValueIsPercent": false,
+      "standardsValue": "0.0000",
+      "standardsValueIsPercent": false
+    },
+    {
+      "comment": "Missing",
+      "commentID": 3,
+      "commentCode": "Mi",
+      "isGradeBookMissingMark": true,
+      "penaltyPct": null,
+      "removeWhenScored": false,
+      "assignmentValue": "0.0000",
+      "assignmentValueIsPercent": false,
+      "standardsValue": "0.0000",
+      "standardsValueIsPercent": false
+    }
+  ],
+  "gradeBookCategories": [
+    {
+      "id": 1,
+      "name": "Normal"
+    },
+    {
+      "id": 2,
+      "name": "Extra Credit"
+    },
+    {
+      "id": 3,
+      "name": "Not for Grading"
+    },
+    {
+      "id": 7,
+      "name": "Content"
+    }
+  ]
+}
