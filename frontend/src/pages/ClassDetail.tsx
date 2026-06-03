@@ -94,6 +94,7 @@ const ClassDetail = () => {
   const [editingPointsTarget, setEditingPointsTarget] = useState<"next" | "exam" | null>(null);
   const [pointsInput, setPointsInput] = useState("");
   const [analysisMode, setAnalysisMode] = useState<"next" | "exam">("next");
+  const [sortKey, setSortKey] = useState<"date" | "score-asc" | "score-desc" | "worth-asc" | "worth-desc" | "name">("date");
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const detailFetchRef = useRef(false);
@@ -201,6 +202,29 @@ const ClassDetail = () => {
     }
     return { totalEarned: e, totalPoints: t };
   }, [effectiveAssignments]);
+
+  const sortedAssignments = useMemo(() => {
+    const arr = [...effectiveAssignments];
+    const parseDate = (d: string) => {
+      if (!d) return 0;
+      const [m, day, y] = d.split("/").map(Number);
+      return new Date(y, m - 1, day).getTime();
+    };
+    if (sortKey === "date") {
+      arr.sort((a, b) => parseDate(b.dueDate) - parseDate(a.dueDate));
+    } else if (sortKey === "name") {
+      arr.sort((a, b) => a.title.localeCompare(b.title));
+    } else if (sortKey === "score-asc") {
+      arr.sort((a, b) => (a.pointsEarned / (a.pointsTotal || 1)) - (b.pointsEarned / (b.pointsTotal || 1)));
+    } else if (sortKey === "score-desc") {
+      arr.sort((a, b) => (b.pointsEarned / (b.pointsTotal || 1)) - (a.pointsEarned / (a.pointsTotal || 1)));
+    } else if (sortKey === "worth-asc") {
+      arr.sort((a, b) => a.pointsTotal - b.pointsTotal);
+    } else if (sortKey === "worth-desc") {
+      arr.sort((a, b) => b.pointsTotal - a.pointsTotal);
+    }
+    return arr;
+  }, [effectiveAssignments, sortKey]);
 
   if (!cls || !activeMp) {
     return (
@@ -411,14 +435,13 @@ const ClassDetail = () => {
                 </div>
               </div>
 
-              {(() => {
-                const activePtsLabel = analysisMode === "exam" ? "Exam pts" : "Next pts";
-                const activePtsValue = analysisMode === "exam" ? edits.examTotalPoints : edits.nextAssignmentTotal;
+              {analysisMode === "next" && (() => {
+                const activePtsValue = edits.nextAssignmentTotal;
 
                 return (
                   <div className="flex items-center justify-between gap-1 rounded-md bg-analysis-foreground/5 px-2 py-1.5 mb-2 text-[10px]">
-                    <span className="text-analysis-foreground/70">{activePtsLabel}</span>
-                    {editingPointsTarget === analysisMode ? (
+                    <span className="text-analysis-foreground/70">Next pts</span>
+                    {editingPointsTarget === "next" ? (
                       <span className="flex items-center gap-0.5">
                         <input
                           className="w-12 rounded border border-analysis-foreground/25 bg-transparent px-1 py-0.5 text-[11px] text-analysis-foreground text-right"
@@ -438,7 +461,7 @@ const ClassDetail = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          setEditingPointsTarget(analysisMode);
+                          setEditingPointsTarget("next");
                           setPointsInput(String(activePtsValue));
                         }}
                         className="font-semibold text-analysis-foreground flex items-center gap-0.5"
@@ -450,26 +473,36 @@ const ClassDetail = () => {
                 );
               })()}
 
-              {analysisMode === "exam" && isWeighting && categories.length > 0 && examCategoryName && (
-                <select
-                  value={examCategoryName}
-                  onChange={(e) => setExamCategoryName(e.target.value)}
-                  className="mb-2 w-full rounded border border-analysis-foreground/20 bg-transparent px-2 py-1 text-[11px] text-analysis-foreground"
-                >
-                  {categories.map((c) => (
-                    <option key={c.name} value={c.name}>
-                      {c.name} ({c.weight}%)
-                    </option>
-                  ))}
-                </select>
-              )}
+              {analysisMode === "exam" && (() => {
+                const mpAvg = semesterProj?.percentage ?? displayGrade ?? totalPercent ?? 0;
+                return (
+                  <div className="mb-2 rounded-md bg-analysis-foreground/5 px-2 py-1.5 text-[10px] text-analysis-foreground/70">
+                    MP avg: <span className="font-semibold text-analysis-foreground">{mpAvg.toFixed(1)}%</span>
+                    <span className="ml-1">(exam worth 10%)</span>
+                  </div>
+                );
+              })()}
 
               <div className="space-y-0.5">
                 {gradeThresholds.map((t) => {
+                  if (analysisMode === "exam") {
+                    const mpAvg = semesterProj?.percentage ?? displayGrade ?? totalPercent ?? 0;
+                    const examNeeded = (t.percent - mpAvg * 0.9) / 0.1;
+                    const possible = examNeeded <= 100 + 1e-6;
+                    const alreadyAchieved = examNeeded <= 0;
+                    return (
+                      <div key={t.label} className="flex justify-between text-xs text-analysis-foreground">
+                        <span>Required exam for {t.label}</span>
+                        <span className={!possible ? "opacity-40 line-through" : alreadyAchieved ? "font-semibold text-grade-a" : "font-semibold"}>
+                          {alreadyAchieved ? "✓ achieved" : `${examNeeded.toFixed(1)}%`}
+                        </span>
+                      </div>
+                    );
+                  }
+                  const bucketPts = edits.nextAssignmentTotal;
+                  const useWeighted = isWeighting && categories.length > 0 && examCategoryName;
                   let needed: number;
                   let possible: boolean;
-                  const useWeighted = analysisMode === "exam" && isWeighting && categories.length > 0 && examCategoryName;
-                  const bucketPts = useWeighted ? edits.examTotalPoints : edits.nextAssignmentTotal;
                   if (useWeighted) {
                     const w = getRequiredScoreWeighted(effectiveAssignments, categories, examCategoryName, bucketPts, t.percent);
                     if (w != null) {
@@ -529,6 +562,37 @@ const ClassDetail = () => {
           </div>
         )}
 
+        <div className="flex flex-wrap items-center gap-1.5 mb-4">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40 mr-1">Sort</span>
+          {(["date", "name"] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setSortKey(key)}
+              className={`px-2.5 py-1 rounded-full text-[10px] font-medium transition-colors border ${sortKey === key ? "bg-primary border-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"}`}
+            >
+              {key === "date" ? "Date" : "Name"}
+            </button>
+          ))}
+          {([ ["score", "Score"], ["worth", "Worth"] ] as const).map(([base, label]) => {
+            const ascKey = `${base}-asc` as const;
+            const descKey = `${base}-desc` as const;
+            const active = sortKey === ascKey || sortKey === descKey;
+            const isAsc = sortKey === ascKey;
+            return (
+              <button
+                key={base}
+                type="button"
+                onClick={() => setSortKey(active && !isAsc ? ascKey : descKey)}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-medium transition-colors border flex items-center gap-1 ${active ? "bg-primary border-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"}`}
+              >
+                {label}
+                <span className={active ? "opacity-100" : "opacity-40"}>{active && isAsc ? "↑" : "↓"}</span>
+              </button>
+            );
+          })}
+        </div>
+
         <div className="space-y-3">
           {detailLoading && effectiveAssignments.length === 0 && (
             <div className="space-y-3 animate-pulse">
@@ -538,7 +602,7 @@ const ClassDetail = () => {
             </div>
           )}
 
-          {effectiveAssignments.map((a) => {
+          {sortedAssignments.map((a) => {
             const isEditing = editingId === a.id;
             const ec = a.isExtraCredit || (a.pointsTotal <= 0 && a.pointsEarned > 0);
             const pct = ec ? null : a.pointsTotal === 0 ? 0 : (a.pointsEarned / a.pointsTotal) * 100;
