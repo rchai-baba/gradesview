@@ -3,12 +3,18 @@ Profile the full sync to figure out where all the time is going.
 Measures each phase: login, config, class-list, pool-init, per-class fetches.
 """
 import asyncio
-import sys
+import pprint
+import json
 import os
+import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 import httpx
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Import scraper internals
 from scraper import (
@@ -18,8 +24,12 @@ from scraper import (
     BASE_URL, JSON_HEADERS,
 )
 
-USERNAME = "chaichai28@midlandps.org"
-PASSWORD = "Huta&%Nanjing78"
+USERNAME = os.environ.get("STUDENTVUE_USERNAME")
+PASSWORD = os.environ.get("STUDENTVUE_PASSWORD")
+
+if not USERNAME or not PASSWORD:
+    print("Error: STUDENTVUE_USERNAME and STUDENTVUE_PASSWORD must be set in .env file.")
+    sys.exit(1)
 
 
 async def profile():
@@ -29,15 +39,17 @@ async def profile():
     print("=" * 60)
     main_client = httpx.AsyncClient(timeout=30)
     t1 = time.perf_counter()
-    await async_login(USERNAME, PASSWORD, main_client)
+    login_resp = await async_login(USERNAME, PASSWORD, main_client)
+    pprint.pprint({"login_response": login_resp})
     t2 = time.perf_counter()
     print(f"[Phase 1] Login: {t2 - t1:.2f}s")
 
     # Phase 2: Get gradebook config (studentGU + GBFocusData)
     t3 = time.perf_counter()
     focus_data = await async_get_gradebook_config(main_client)
+    print("[Phase 2] GradebookConfig response:")
+    pprint.pprint(focus_data)
     t4 = time.perf_counter()
-    print(f"[Phase 2] GradebookConfig: {t4 - t3:.2f}s")
 
     student_gu = focus_data.get("_studentGU", "0")
     schools = focus_data.get("Schools", [])
@@ -56,6 +68,8 @@ async def profile():
         fake_school = {**school, "GradingPeriods": [gp]}
         fake_focus = {**focus_data, "Schools": [fake_school]}
         res = await async_get_class_list(main_client, fake_focus)
+        print(f"[ClassList] Period {gp['Name']} response:")
+        pprint.pprint(res)
         te = time.perf_counter()
         period_info[gp["Name"]] = res
         print(f"  ClassList({gp['Name']}): {te - ts:.2f}s  ({len(res['classes'])} classes)")
@@ -93,10 +107,14 @@ async def profile():
                 
                 ts_lc = time.perf_counter()
                 title_map = await async_load_class_control(client, focus_info, cls, student_gu, focus_key)
+                print(f"[LoadControl] Class {cls.get('Name','?')} response:")
+                pprint.pprint(title_map)
                 te_lc = time.perf_counter()
                 
                 ts_gc = time.perf_counter()
                 raw = await async_get_class_grades(client, focus_key)
+                print(f"[GetClassData] Class {cls.get('Name','?')} response (truncated):")
+                pprint.pprint({k: raw[k] for k in list(raw)[:3]})
                 te_gc = time.perf_counter()
                 
                 te = time.perf_counter()
@@ -148,6 +166,7 @@ async def profile():
 
     overhead = total - (t2-t1) - (t4-t3) - (t6-t5) - (t8-t7) - (t10-t9)
     print(f"  Overhead:     {overhead:.2f}s")
+
 
 if __name__ == "__main__":
     asyncio.run(profile())

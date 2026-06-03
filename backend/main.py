@@ -4,10 +4,20 @@ Proxies StudentVue grade data for the React frontend.
 """
 
 from fastapi import FastAPI
+import re
+
+
+def _normalize_username(username: str) -> str:
+    """Return a valid email username. If not already an email, append the domain."""
+    email_regex = r'^[^@\s]+@[^@\s]+\.[^@\s]+$'
+    if re.match(email_regex, username):
+        return username
+    return f"{username}@midlandps.org"
+
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 
 from scraper import (
     scrape, async_scrape_class_detail, LoginError, StudentVueError, ParseError,
@@ -32,12 +42,26 @@ class LoginRequest(BaseModel):
     """cards_only = fast grid (no per-class GetClassData). current_period_only / full = load assignments on login."""
     fetch_mode: Literal["full", "current_period_only", "cards_only"] = "cards_only"
 
+    @validator('username', pre=True, always=True)
+    def normalize_username(cls, v):
+        email_regex = r'^[^@\s]+@[^@\s]+\.[^@\s]+$'
+        if re.match(email_regex, v):
+            return v
+        return f"{v}@midlandps.org"
+
 
 class ClassDetailRequest(BaseModel):
     username: str
     password: str
     markingPeriod: str
     synergyClassIds: list[int]
+
+    @validator('username', pre=True, always=True)
+    def normalize_username(cls, v):
+        email_regex = r'^[^@\s]+@[^@\s]+\.[^@\s]+$'
+        if re.match(email_regex, v):
+            return v
+        return f"{v}@midlandps.org"
 
 
 @app.get("/api/health")
@@ -50,6 +74,10 @@ async def api_login(body: LoginRequest):
     # Sync button (or explicit login) always forces a fresh session
     _invalidate_session(body.username, body.password)
     from fastapi.responses import JSONResponse
+    
+    # Normalize username to ensure it is an email address
+    body.username = _normalize_username(body.username)
+
 
     try:
         data = await scrape(body.username, body.password, fetch_mode=body.fetch_mode)
@@ -74,7 +102,11 @@ async def debug_loadcontrol_html(body: LoginRequest):
     async with httpx.AsyncClient(timeout=30) as client:
         try:
             await async_login(body.username, body.password, client)
+            # Ensure username is normalized to an email format
+            body.username = _normalize_username(body.username)
             focus_data = await async_get_gradebook_config(client)
+
+
             class_list = await async_get_class_list(client, focus_data)
             focus_info = class_list["focus_info"]
             focus_key = class_list["focus_key"]
@@ -129,7 +161,11 @@ async def debug_raw_assignment(body: LoginRequest):
     async with httpx.AsyncClient(timeout=30) as client:
         try:
             await async_login(body.username, body.password, client)
+            # Normalize username for email consistency
+            body.username = _normalize_username(body.username)
             focus_data = await async_get_gradebook_config(client)
+
+
             class_list = await async_get_class_list(client, focus_data)
             focus_info = class_list["focus_info"]
             focus_key = class_list["focus_key"]
@@ -156,6 +192,8 @@ async def api_class_detail(body: ClassDetailRequest):
     from fastapi.responses import JSONResponse
 
     try:
+        # Normalize username to proper email format
+        body.username = _normalize_username(body.username)
         data = await async_scrape_class_detail(
             body.username,
             body.password,
