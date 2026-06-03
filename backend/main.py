@@ -19,7 +19,7 @@ from typing import Literal
 
 from pydantic import BaseModel, validator
 
-from scraper import (
+from .scraper import (
     scrape, async_scrape_class_detail, LoginError, StudentVueError, ParseError,
     async_login, async_get_gradebook_config, async_get_class_list, async_get_class_grades,
     async_load_class_control_raw_html, _get_focus_info, _invalidate_session,
