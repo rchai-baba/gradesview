@@ -10,7 +10,7 @@ const Login = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { triggerSync } = useSyncContext();
+  const { triggerBackgroundDetailSync } = useSyncContext();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,8 +28,8 @@ const Login = () => {
       saveSessionCredentials(username, password);
       saveGrades(data);
       navigate("/grades");
-      // Kick off a background sync immediately after cards load
-      triggerSync();
+      // Kick off background detail sync to load all assignments after cards land
+      triggerBackgroundDetailSync();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {

@@ -140,3 +140,50 @@ export function clearGrades(): void {
   localStorage.removeItem("grades-auth");
   clearSessionCredentials();
 }
+
+export function synergyClassIds(cls: ApiClass): number[] {
+  if (cls.mergedFromIds?.length) {
+    return cls.mergedFromIds.map((id) => parseInt(id, 10)).filter((n) => !Number.isNaN(n));
+  }
+  const n = parseInt(cls.id, 10);
+  return Number.isNaN(n) ? [] : [n];
+}
+
+/**
+ * Background-fetch assignments for every class x marking period that hasn't loaded yet.
+ * Single bulk request to the backend (one login, parallel fetches server-side).
+ * Calls onProgress after patching all results so the UI re-renders once.
+ */
+export async function backgroundSyncAllDetails(
+  username: string,
+  password: string,
+  onProgress: () => void,
+): Promise<void> {
+  const data = loadGrades();
+  if (!data) return;
+
+  const items: { classId: string; markingPeriod: string; synergyClassIds: number[] }[] = [];
+  for (const cls of data.classes) {
+    if (cls.error) continue;
+    const ids = synergyClassIds(cls);
+    if (!ids.length) continue;
+    for (const mp of cls.markingPeriods) {
+      if (mp.assignmentsLoaded) continue;
+      items.push({ classId: cls.id, markingPeriod: mp.label, synergyClassIds: ids });
+    }
+  }
+  if (!items.length) return;
+
+  const res = await fetch("/api/bulk-class-details", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password, items }),
+  });
+  if (!res.ok) return;
+
+  const json = await res.json() as { results: { classId: string; markingPeriod: string; markingPeriodData: ApiMarkingPeriod }[] };
+  for (const r of json.results) {
+    patchClassMarkingPeriod(r.classId, r.markingPeriod, r.markingPeriodData);
+  }
+  onProgress();
+}

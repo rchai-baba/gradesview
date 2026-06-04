@@ -20,7 +20,7 @@ from typing import Literal
 from pydantic import BaseModel, validator
 
 from .scraper import (
-    scrape, async_scrape_class_detail, LoginError, StudentVueError, ParseError,
+    scrape, async_scrape_class_detail, async_scrape_all_details, LoginError, StudentVueError, ParseError,
     async_login, async_get_gradebook_config, async_get_class_list, async_get_class_grades,
     async_load_class_control_raw_html, _get_focus_info, _invalidate_session,
 )
@@ -185,6 +185,45 @@ async def debug_raw_assignment(body: LoginRequest):
             return JSONResponse(status_code=401, content={"error": "Invalid credentials"})
         except Exception as e:
             return JSONResponse(status_code=500, content={"error": f"{type(e).__name__}: {e}"})
+
+
+class BulkDetailItem(BaseModel):
+    classId: str
+    markingPeriod: str
+    synergyClassIds: list[int]
+
+
+class BulkDetailRequest(BaseModel):
+    username: str
+    password: str
+    items: list[BulkDetailItem]
+
+    @validator('username', pre=True, always=True)
+    def normalize_username(cls, v):
+        email_regex = r'^[^@\s]+@[^@\s]+\.[^@\s]+$'
+        if re.match(email_regex, v):
+            return v
+        return f"{v}@midlandps.org"
+
+
+@app.post("/api/bulk-class-details")
+async def api_bulk_class_details(body: BulkDetailRequest):
+    from fastapi.responses import JSONResponse
+    try:
+        body.username = _normalize_username(body.username)
+        items = [{"classId": i.classId, "markingPeriod": i.markingPeriod, "synergyClassIds": i.synergyClassIds} for i in body.items]
+        results = await async_scrape_all_details(body.username, body.password, items)
+        return JSONResponse(content={"results": results})
+    except LoginError:
+        return JSONResponse(status_code=401, content={"error": "Invalid credentials"})
+    except StudentVueError as e:
+        return JSONResponse(status_code=502, content={"error": str(e) or "StudentVue is not responding"})
+    except ParseError as e:
+        return JSONResponse(status_code=500, content={"error": f"Failed to load class details: {e}"})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(status_code=500, content={"error": f"Unexpected error: {e}"})
 
 
 @app.post("/api/class-detail")

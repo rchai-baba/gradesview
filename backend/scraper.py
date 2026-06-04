@@ -1236,6 +1236,147 @@ async def scrape(username: str, password: str, *, fetch_mode: str = "full") -> d
         return {"student": {"name": student_name}, "periods": period_names, "classes": all_class_data, "semesterGroups": semester_groups, "fetchMode": fetch_mode}
 
 
+async def async_scrape_all_details(
+    username: str,
+    password: str,
+    items: list[dict],  # [{"markingPeriod": str, "synergyClassIds": [int], "classId": str}]
+) -> list[dict]:
+    """
+    Fetch assignments for multiple class×period combos in parallel using one login + session pool.
+    Returns list of {"classId": str, "markingPeriod": str, "markingPeriodData": {...}} per item.
+    Items that fail are omitted from results.
+    """
+    if not items:
+        return []
+
+    async with httpx.AsyncClient(timeout=30) as main_client:
+        await async_login(username, password, main_client)
+        focus_data = await async_get_gradebook_config(main_client)
+        student_gu = focus_data.get("_studentGU", "0")
+        schools = focus_data.get("Schools", [])
+        if not schools:
+            raise ParseError("No schools in GBFocusData")
+        school = schools[0]
+
+        # Group items by marking period so we only call GradebookFocusClassInfo once per period
+        from collections import defaultdict
+        by_period: dict[str, list[dict]] = defaultdict(list)
+        for item in items:
+            by_period[item["markingPeriod"]].append(item)
+
+        # Build focus_info + class list per period
+        period_context: dict[str, dict] = {}
+        for pname in by_period:
+            gp = _find_grading_period_by_name(focus_data, pname)
+            if not gp:
+                continue
+            mark_periods = gp.get("MarkPeriods", [])
+            mark_period_gu = mark_periods[0]["GU"] if mark_periods else ""
+            focus_info = {"school": school, "grading_period": gp, "mark_period_gu": mark_period_gu}
+            payload = {
+                "request": {
+                    "gradingPeriodGU": gp.get("GU"),
+                    "AGU": "0",
+                    "orgYearGU": gp.get("OrgYearGU"),
+                    "schoolID": school.get("SchoolID"),
+                    "markPeriodGU": mark_period_gu,
+                }
+            }
+            r = await main_client.post(
+                f"{BASE_URL}/service/PXP2Communication.asmx/GradebookFocusClassInfo",
+                content=json.dumps(payload),
+                headers={**JSON_HEADERS, "AGU": "0", "Referer": f"{BASE_URL}/PXP2_Gradebook.aspx"},
+                timeout=30,
+            )
+            r.raise_for_status()
+            d = r.json().get("d", {})
+            period_context[pname] = {
+                "focus_key": d.get("FOCUS_KEY", ""),
+                "classes": d.get("Data", {}).get("Classes", []),
+                "focus_info": focus_info,
+            }
+
+    # Build work items: (class_id_str, marking_period, synergy_ids, focus_key, focus_info, classes_list)
+    work_items = []
+    for pname, period_items in by_period.items():
+        ctx = period_context.get(pname)
+        if not ctx:
+            continue
+        for item in period_items:
+            work_items.append({
+                "classId": item["classId"],
+                "markingPeriod": pname,
+                "synergyClassIds": item["synergyClassIds"],
+                "focus_key": ctx["focus_key"],
+                "focus_info": ctx["focus_info"],
+                "classes": ctx["classes"],
+            })
+
+    if not work_items:
+        return []
+
+    pool_size = min(len(work_items), 4)
+    pool = AsyncSessionPool(username, password, size=pool_size)
+    await pool.initialize()
+
+    results = []
+    results_lock = asyncio.Lock()
+
+    async def worker():
+        while work_items:
+            try:
+                item = work_items.pop()
+            except IndexError:
+                break
+            client = await pool.acquire()
+            try:
+                raw = None
+                for cid in item["synergyClassIds"]:
+                    cls = next((c for c in item["classes"] if c["ID"] == cid), None)
+                    if not cls:
+                        continue
+                    try:
+                        title_map = await async_load_class_control(client, item["focus_info"], cls, student_gu, item["focus_key"])
+                        raw = await async_get_class_grades(client, item["focus_key"])
+                        raw["_titleMap"] = title_map
+                        break
+                    except Exception:
+                        continue
+
+                if raw is None:
+                    continue
+
+                assignments = []
+                for a in raw.get("assignments", []):
+                    if not a.get("isForGrading", True) or a.get("hideInPortal", False):
+                        continue
+                    assignments.append(_transform_assignment(a, raw.get("_titleMap")))
+
+                student_data = (raw.get("students") or [{}])[0]
+                mp_data = {
+                    "label": item["markingPeriod"],
+                    "percentage": student_data.get("percentage"),
+                    "calculatedMark": student_data.get("calculatedMark"),
+                    "assignments": assignments,
+                    "isAssignmentWeightingOn": raw.get("isAssignmentWeightingOn", False),
+                    "assignmentCategories": _transform_categories(raw),
+                }
+                async with results_lock:
+                    results.append({
+                        "classId": item["classId"],
+                        "markingPeriod": item["markingPeriod"],
+                        "markingPeriodData": mp_data,
+                    })
+            except Exception:
+                pass
+            finally:
+                await pool.release(client)
+
+    await asyncio.gather(*(worker() for _ in range(pool_size)))
+    await pool.close()
+    return results
+
+
 def scrape_class_detail(username: str, password: str, marking_period: str, synergy_class_ids: list[int]) -> dict:
     """Sync wrapper for legacy calls (though we should update main.py)."""
     return asyncio.run(async_scrape_class_detail(username, password, marking_period, synergy_class_ids))

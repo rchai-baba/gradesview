@@ -5,6 +5,7 @@ import {
   fetchClassDetail,
   getSessionCredentials,
   patchClassMarkingPeriod,
+  synergyClassIds,
 } from "@/services/api";
 import {
   getLetterGrade,
@@ -31,13 +32,6 @@ const gradeThresholds = [
   { label: "B-", percent: 80 },
 ];
 
-function synergyClassIdsFromClass(cls: ApiClass): number[] {
-  if (cls.mergedFromIds?.length) {
-    return cls.mergedFromIds.map((id) => parseInt(id, 10)).filter((n) => !Number.isNaN(n));
-  }
-  const n = parseInt(cls.id, 10);
-  return Number.isNaN(n) ? [] : [n];
-}
 
 function formatPeriodShort(label: string) {
   return label.replace(/marking period/i, "MP").replace(/quarter/i, "Q");
@@ -112,7 +106,7 @@ const ClassDetail = () => {
       setDetailError("Sign in again to load assignments (session missing).");
       return;
     }
-    const synergyIds = synergyClassIdsFromClass(cls);
+    const synergyIds = synergyClassIds(cls);
     if (!synergyIds.length) {
       setDetailError("Cannot load this class — re-sync with full login.");
       return;
